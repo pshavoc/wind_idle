@@ -1,0 +1,329 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Motorboat Simulation</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;700&display=swap" rel="stylesheet">
+    <style>
+        body {
+            font-family: 'Inter', sans-serif;
+            overflow: hidden; /* Prevents scrollbars from appearing */
+        }
+        canvas {
+            background-color: #3b82f6; /* A nice water blue */
+            display: block;
+            width: 100%;
+            height: 100%;
+            cursor: crosshair;
+        }
+        .overlay {
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            display: flex;
+            flex-direction: column;
+            justify-content: space-between;
+            pointer-events: none; /* Allows clicks to go through to the canvas */
+        }
+        .controls, .info-panel {
+            pointer-events: auto; /* Re-enable pointer events for controls */
+            background-color: rgba(255, 255, 255, 0.8);
+            backdrop-filter: blur(10px);
+            border: 1px solid rgba(255, 255, 255, 0.2);
+        }
+    </style>
+</head>
+<body class="bg-gray-900 text-white m-0 p-0">
+
+    <div class="relative w-screen h-screen">
+        <!-- Canvas for the simulation -->
+        <canvas id="simulationCanvas"></canvas>
+
+        <div class="overlay p-4 md:p-6">
+            <!-- Top-left Info Panel -->
+            <div class="info-panel self-start p-4 rounded-lg shadow-lg">
+                <h2 class="text-lg font-bold text-gray-800 mb-2">Vessel Info</h2>
+                <div class="grid grid-cols-2 gap-x-4 gap-y-1 text-gray-700">
+                    <span>Speed:</span><span id="speedDisplay" class="font-mono text-right">0.0 knots</span>
+                    <span>Wind Speed:</span><span id="windSpeedDisplay" class="font-mono text-right">0.0 m/s</span>
+                    <span>Wind Dir:</span><span id="windDirDisplay" class="font-mono text-right">0 °</span>
+                </div>
+            </div>
+
+            <!-- Bottom-center Controls -->
+            <div class="controls self-center p-4 rounded-lg shadow-lg mb-4">
+                <div class="flex flex-col md:flex-row items-center gap-6">
+                    <!-- Throttle Control -->
+                    <div class="flex items-center gap-3">
+                        <label for="throttle" class="font-medium text-gray-800">Throttle:</label>
+                        <input type="range" id="throttle" min="0" max="100" value="0" class="w-40 h-2 bg-gray-300 rounded-lg appearance-none cursor-pointer">
+                         <span id="throttleValue" class="font-mono text-gray-800 w-12 text-right">0%</span>
+                    </div>
+                    <!-- Rudder Control -->
+                    <div class="flex items-center gap-3">
+                        <label for="rudder" class="font-medium text-gray-800">Rudder:</label>
+                        <input type="range" id="rudder" min="-45" max="45" value="0" class="w-40 h-2 bg-gray-300 rounded-lg appearance-none cursor-pointer">
+                        <span id="rudderValue" class="font-mono text-gray-800 w-12 text-right">0°</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const canvas = document.getElementById('simulationCanvas');
+        const ctx = canvas.getContext('2d');
+
+        // UI Elements
+        const throttleSlider = document.getElementById('throttle');
+        const rudderSlider = document.getElementById('rudder');
+        const throttleValue = document.getElementById('throttleValue');
+        const rudderValue = document.getElementById('rudderValue');
+        const speedDisplay = document.getElementById('speedDisplay');
+        const windSpeedDisplay = document.getElementById('windSpeedDisplay');
+        const windDirDisplay = document.getElementById('windDirDisplay');
+        
+        // --- Simulation Constants ---
+        const BOAT_LENGTH = 40;
+        const BOAT_WIDTH = 15;
+        const MAX_THROTTLE_FORCE = 0.1;
+        const WATER_DRAG_COEFFICIENT = 0.985; // Closer to 1 means more drag
+        const WIND_INFLUENCE_FACTOR = 0.001;
+        const TURN_RATE_FACTOR = 0.005; // How much speed affects turning
+
+        // --- Simulation State ---
+        let boat = {
+            x: 0,
+            y: 0,
+            angle: -Math.PI / 2, // Start pointing up
+            speed: 0,
+            vx: 0,
+            vy: 0,
+        };
+
+        let wind = {
+            speed: 0,
+            direction: 0, // Angle in radians
+        };
+
+        let controls = {
+            throttle: 0, // 0 to 100
+            rudder: 0,   // -45 to 45 degrees
+        };
+
+        // --- Utility Functions ---
+        function degreesToRadians(degrees) {
+            return degrees * (Math.PI / 180);
+        }
+
+        function radiansToDegrees(radians) {
+            let deg = radians * (180 / Math.PI);
+            return (deg + 360) % 360; // Normalize to 0-360
+        }
+
+        // --- Main Simulation Functions ---
+
+        /**
+         * Initializes the simulation, sets canvas size, and starts the loop.
+         */
+        function initialize() {
+            // Set canvas size
+            canvas.width = window.innerWidth;
+            canvas.height = window.innerHeight;
+
+            // Place boat in the center
+            boat.x = canvas.width / 2;
+            boat.y = canvas.height / 2;
+
+            // Generate random wind
+            generateNewWind();
+
+            // Set up event listeners for controls
+            throttleSlider.addEventListener('input', (e) => {
+                controls.throttle = parseInt(e.target.value, 10);
+                throttleValue.textContent = `${controls.throttle}%`;
+            });
+            rudderSlider.addEventListener('input', (e) => {
+                controls.rudder = parseInt(e.target.value, 10);
+                rudderValue.textContent = `${controls.rudder}°`;
+            });
+
+            // Handle window resizing
+            window.addEventListener('resize', () => {
+                canvas.width = window.innerWidth;
+                canvas.height = window.innerHeight;
+            });
+            
+            // Periodically update wind
+            setInterval(generateNewWind, 15000); // New wind every 15 seconds
+
+            // Start the simulation loop
+            animate();
+        }
+
+        /**
+         * Generates a new random wind speed and direction.
+         */
+        function generateNewWind() {
+            wind.speed = Math.random() * 10; // 0 to 10 m/s
+            wind.direction = Math.random() * 2 * Math.PI; // Full circle in radians
+            updateInfoPanel();
+        }
+
+        /**
+         * Updates all the physics and state of the simulation.
+         */
+        function update() {
+            // 1. Calculate engine force based on throttle
+            const engineForce = (controls.throttle / 100) * MAX_THROTTLE_FORCE;
+
+            // 2. Calculate forward acceleration
+            const forward_ax = Math.cos(boat.angle) * engineForce;
+            const forward_ay = Math.sin(boat.angle) * engineForce;
+            
+            // 3. Update velocity based on acceleration
+            boat.vx += forward_ax;
+            boat.vy += forward_ay;
+
+            // 4. Apply wind force
+            const wind_vx = Math.cos(wind.direction) * wind.speed * WIND_INFLUENCE_FACTOR;
+            const wind_vy = Math.sin(wind.direction) * wind.speed * WIND_INFLUENCE_FACTOR;
+            boat.vx += wind_vx;
+            boat.vy += wind_vy;
+
+            // 5. Apply water drag (friction)
+            boat.vx *= WATER_DRAG_COEFFICIENT;
+            boat.vy *= WATER_DRAG_COEFFICIENT;
+
+            // 6. Update boat's position
+            boat.x += boat.vx;
+            boat.y += boat.vy;
+            
+            // 7. Calculate total speed for turning and display
+            boat.speed = Math.sqrt(boat.vx * boat.vx + boat.vy * boat.vy);
+
+            // 8. Adjust boat angle based on rudder and speed
+            const rudderRadians = degreesToRadians(controls.rudder);
+            const turnRate = rudderRadians * boat.speed * TURN_RATE_FACTOR;
+            boat.angle += turnRate;
+
+            // 9. Handle screen wrapping
+            if (boat.x > canvas.width + BOAT_LENGTH) boat.x = -BOAT_LENGTH;
+            if (boat.x < -BOAT_LENGTH) boat.x = canvas.width + BOAT_LENGTH;
+            if (boat.y > canvas.height + BOAT_LENGTH) boat.y = -BOAT_LENGTH;
+            if (boat.y < -BOAT_LENGTH) boat.y = canvas.height + BOAT_LENGTH;
+
+            // 10. Update UI displays
+            updateInfoPanel();
+        }
+        
+        /**
+         * Draws everything on the canvas.
+         */
+        function draw() {
+            // Clear the canvas with the water color
+            ctx.fillStyle = '#3b82f6';
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+            // Draw the boat
+            drawBoat();
+            
+            // Draw the wind indicator
+            drawWindIndicator();
+        }
+        
+        /**
+         * Draws the boat shape at its current position and angle.
+         */
+        function drawBoat() {
+            ctx.save(); // Save the current canvas state
+            ctx.translate(boat.x, boat.y); // Move origin to the boat's position
+            ctx.rotate(boat.angle); // Rotate the canvas to the boat's angle
+
+            // Draw the hull (main body) - dark gray
+            ctx.fillStyle = '#4B5563';
+            ctx.fillRect(-BOAT_LENGTH / 2, -BOAT_WIDTH / 2, BOAT_LENGTH, BOAT_WIDTH);
+
+            // Draw the cabin - light gray
+            ctx.fillStyle = '#D1D5DB';
+            ctx.fillRect(-BOAT_LENGTH / 4, -BOAT_WIDTH / 2 + 2, BOAT_LENGTH / 2, BOAT_WIDTH - 4);
+
+            // Draw the bow (front point) - dark gray
+            ctx.fillStyle = '#4B5563';
+            ctx.beginPath();
+            ctx.moveTo(BOAT_LENGTH / 2, -BOAT_WIDTH / 2);
+            ctx.lineTo(BOAT_LENGTH / 2 + 15, 0);
+            ctx.lineTo(BOAT_LENGTH / 2, BOAT_WIDTH / 2);
+            ctx.closePath();
+            ctx.fill();
+
+            ctx.restore(); // Restore the canvas to its original state
+        }
+        
+        /**
+         * Draws a wind arrow in the top right corner.
+         */
+        function drawWindIndicator() {
+            const indicatorX = canvas.width - 60;
+            const indicatorY = 60;
+            const arrowLength = 25 + wind.speed * 2;
+
+            ctx.save();
+            ctx.translate(indicatorX, indicatorY);
+            ctx.rotate(wind.direction);
+
+            ctx.strokeStyle = 'rgba(255, 255, 255, 0.7)';
+            ctx.lineWidth = 3;
+            ctx.fillStyle = 'rgba(255, 255, 255, 0.7)';
+            
+            // Line
+            ctx.beginPath();
+            ctx.moveTo(-arrowLength / 2, 0);
+            ctx.lineTo(arrowLength / 2, 0);
+            ctx.stroke();
+
+            // Arrowhead
+            ctx.beginPath();
+            ctx.moveTo(arrowLength / 2, 0);
+            ctx.lineTo(arrowLength / 2 - 10, -5);
+            ctx.lineTo(arrowLength / 2 - 10, 5);
+            ctx.closePath();
+            ctx.fill();
+
+            ctx.restore();
+            
+            // "W" for wind
+            ctx.font = '20px sans-serif';
+            ctx.fillStyle = 'rgba(255, 255, 255, 0.7)';
+            ctx.fillText('W', indicatorX - 8, indicatorY + 8);
+        }
+
+        /**
+         * Updates the text content of the information panel.
+         */
+        function updateInfoPanel() {
+            // Convert speed (pixels/frame) to knots (a more nautical unit)
+            const knots = (boat.speed * 10).toFixed(1);
+            speedDisplay.textContent = `${knots} knots`;
+            windSpeedDisplay.textContent = `${wind.speed.toFixed(1)} m/s`;
+            windDirDisplay.textContent = `${Math.round(radiansToDegrees(wind.direction))} °`;
+        }
+
+        /**
+         * The main animation loop.
+         */
+        function animate() {
+            update();
+            draw();
+            requestAnimationFrame(animate); // Queue the next frame
+        }
+
+        // --- Start the Simulation ---
+        window.onload = initialize;
+    </script>
+</body>
+</html>
