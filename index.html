@@ -290,10 +290,22 @@
         }
 
         // --- Main Loop ---
-        function animate() { requestAnimationFrame(animate); update(); draw(); }
-        function update() {
-            if (autopilotMode !== 'OFF') runAutopilot();
-            else handleKeyboardControls();
+        function animate() { 
+            requestAnimationFrame(animate);
+            update_physics();
+            pilot();
+            draw();
+        }
+
+        function pilot() {
+            if (autopilotMode !== 'OFF') {
+                runAutopilot();
+            } else {
+                handleKeyboardControls();
+            }
+        }
+
+        function update_physics() {
 
             // True physics update
             const engineForce = (controls.throttle / 100) * MAX_THROTTLE_FORCE;
