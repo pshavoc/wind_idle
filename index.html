@@ -5,6 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Motorboat Simulation</title>
     <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/mathjs/11.7.0/math.js"></script>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;700&display=swap" rel="stylesheet">
     <style>
         body {
@@ -31,9 +32,13 @@
         }
         .controls, .info-panel {
             pointer-events: auto; /* Re-enable pointer events for controls */
-            background-color: rgba(255, 255, 255, 0.8);
+            background-color: rgba(255, 255, 255, 0.85);
             backdrop-filter: blur(10px);
             border: 1px solid rgba(255, 255, 255, 0.2);
+        }
+        .btn-autopilot {
+            transition: background-color 0.3s ease, color 0.3s ease;
+            width: 130px; /* Give button a fixed width */
         }
     </style>
 </head>
@@ -45,18 +50,26 @@
 
         <div class="overlay p-4 md:p-6">
             <!-- Top-left Info Panel -->
-            <div class="info-panel self-start p-4 rounded-lg shadow-lg">
+            <div class="info-panel self-start p-4 rounded-lg shadow-lg text-sm">
                 <h2 class="text-lg font-bold text-gray-800 mb-2">Vessel Info</h2>
                 <div class="grid grid-cols-2 gap-x-4 gap-y-1 text-gray-700">
                     <span>Speed:</span><span id="speedDisplay" class="font-mono text-right">0.0 knots</span>
-                    <span>Wind Speed:</span><span id="windSpeedDisplay" class="font-mono text-right">0.0 m/s</span>
-                    <span>Wind Dir:</span><span id="windDirDisplay" class="font-mono text-right">0 °</span>
+                    <hr class="col-span-2 my-1 border-gray-300">
+                    <span>True Wind:</span><span id="windSpeedDisplay" class="font-mono text-right">0.0 m/s</span>
+                    <span>(Hidden) Dir:</span><span id="windDirDisplay" class="font-mono text-right">0 °</span>
+                    <hr class="col-span-2 my-1 border-gray-300">
+                    <span>Est. Wind:</span><span id="estWindSpeedDisplay" class="font-mono text-right text-purple-700 font-semibold">0.0 m/s</span>
+                    <span>Est. Dir:</span><span id="estWindDirDisplay" class="font-mono text-right text-purple-700 font-semibold">0 °</span>
+                    <hr class="col-span-2 my-1 border-gray-300">
+                    <span>Autopilot:</span><span id="autopilotStatus" class="font-mono text-right font-semibold text-red-600">OFF</span>
                 </div>
             </div>
 
             <!-- Bottom-center Controls -->
             <div class="controls self-center p-4 rounded-lg shadow-lg mb-4">
                 <div class="flex flex-col md:flex-row items-center gap-6">
+                    <!-- Autopilot Button -->
+                    <button id="autopilotBtn" class="btn-autopilot bg-blue-500 hover:bg-blue-600 text-white font-bold py-2 px-4 rounded-lg">Autopilot OFF</button>
                     <!-- Throttle Control -->
                     <div class="flex items-center gap-3">
                         <label for="throttle" class="font-medium text-gray-800">Throttle:</label>
@@ -79,220 +92,290 @@
         const ctx = canvas.getContext('2d');
 
         // UI Elements
-        const throttleSlider = document.getElementById('throttle');
-        const rudderSlider = document.getElementById('rudder');
-        const throttleValue = document.getElementById('throttleValue');
-        const rudderValue = document.getElementById('rudderValue');
-        const speedDisplay = document.getElementById('speedDisplay');
-        const windSpeedDisplay = document.getElementById('windSpeedDisplay');
-        const windDirDisplay = document.getElementById('windDirDisplay');
+        const throttleSlider = document.getElementById('throttle'), rudderSlider = document.getElementById('rudder');
+        const throttleValue = document.getElementById('throttleValue'), rudderValue = document.getElementById('rudderValue');
+        const speedDisplay = document.getElementById('speedDisplay'), windSpeedDisplay = document.getElementById('windSpeedDisplay');
+        const windDirDisplay = document.getElementById('windDirDisplay'), estWindSpeedDisplay = document.getElementById('estWindSpeedDisplay');
+        const estWindDirDisplay = document.getElementById('estWindDirDisplay'), autopilotBtn = document.getElementById('autopilotBtn');
+        const autopilotStatus = document.getElementById('autopilotStatus');
         
         // --- Simulation Constants ---
-        const BOAT_LENGTH = 40;
-        const BOAT_WIDTH = 15;
-        const MAX_THROTTLE_FORCE = 0.1;
-        const WATER_DRAG_COEFFICIENT = 0.985;
-        const WIND_INFLUENCE_FACTOR = 0.001;
-        const TURN_RATE_FACTOR = 0.005;
-        const THROTTLE_KEY_RATE = 0.5; // How fast throttle changes with keys
-        const RUDDER_KEY_RATE = 1; // How fast rudder changes with keys
+        const DT = 1; // Simulation time step for smoother physics
+        const BOAT_LENGTH = 40, BOAT_WIDTH = 15, MAX_THROTTLE_FORCE = 0.1;
+        const WATER_DRAG_COEFFICIENT = 0.03, WIND_FORCE_COEFFICIENT = 0.001;
+        const TURN_RATE_FACTOR = 0.01, THROTTLE_KEY_RATE = 0.5, RUDDER_KEY_RATE = 1;
+        const THROTTLE_TURN_INFLUENCE = 0.05; // How much throttle affects turning authority
 
+        // --- Autopilot Constants ---
+        const AP_STOPPING_DISTANCE = 15, AP_MAX_THROTTLE = 40;
+        const THROTTLE_P_GAIN = 0.5, RUDDER_P_GAIN = 1.0;
+        const WIND_VANE_THROTTLE = 10;
+
+        // --- Kalman Filter Constants ---
+        const PROCESS_NOISE_POS = 0.01, PROCESS_NOISE_VEL = 0.1, PROCESS_NOISE_WIND = 0.05;
+        const GPS_NOISE = 2.0; // Noise in pixels for the GPS measurement
+        
         // --- Simulation State ---
         let boat = { x: 0, y: 0, angle: -Math.PI / 2, speed: 0, vx: 0, vy: 0 };
-        let wind = { speed: 0, direction: 0 };
+        let trueWind = { vx: 0, vy: 0 };
         let controls = { throttle: 0, rudder: 0 };
-        let keysPressed = {}; // Object to track currently pressed keys
+        let keysPressed = {};
+        let autopilotMode = 'OFF';
+        let anchorTarget = null;
 
+        // --- Kalman Filter State (using math.js) ---
+        // State x = [pos_x, pos_y, vel_x, vel_y, wind_vx, wind_vy]'
+        let kf = {
+            x: math.matrix(new Array(6).fill(0)),
+            P: math.identity(6),
+            Q: math.identity(6),
+            R: math.identity(2),
+            H: math.matrix([[1, 0, 0, 0, 0, 0], [0, 1, 0, 0, 0, 0]])
+        };
+        
         // --- Utility Functions ---
-        function degreesToRadians(degrees) { return degrees * (Math.PI / 180); }
-        function radiansToDegrees(radians) { return (radians * (180 / Math.PI) + 360) % 360; }
+        function degreesToRadians(d) { return d * (Math.PI / 180); }
+        function radiansToDegrees(r) { return (r * (180 / Math.PI) + 360) % 360; }
+        function gaussianRandom() { let u=0,v=0; while(u===0)u=Math.random(); while(v===0)v=Math.random(); return Math.sqrt(-2.0*Math.log(u))*Math.cos(2.0*Math.PI*v); }
 
         // --- Main Simulation Functions ---
         function initialize() {
             canvas.width = window.innerWidth;
             canvas.height = window.innerHeight;
+            
+            // Initialize boat state
             boat.x = canvas.width / 2;
             boat.y = canvas.height / 2;
             
+            // Initialize KF state using math.js
+            kf.x.set([0], boat.x);
+            kf.x.set([1], boat.y);
+            kf.P = math.multiply(math.identity(6), 100);
+            kf.Q = math.diag([PROCESS_NOISE_POS, PROCESS_NOISE_POS, PROCESS_NOISE_VEL, PROCESS_NOISE_VEL, PROCESS_NOISE_WIND, PROCESS_NOISE_WIND]);
+            kf.R = math.multiply(math.identity(2), GPS_NOISE**2);
+
             generateNewWind();
 
-            // Set up event listeners for controls
-            throttleSlider.addEventListener('input', (e) => {
-                controls.throttle = parseInt(e.target.value, 10);
-            });
-            rudderSlider.addEventListener('input', (e) => {
-                controls.rudder = parseInt(e.target.value, 10);
-            });
-
-            // Keyboard event listeners
+            // --- Event Listeners ---
+            throttleSlider.addEventListener('input', (e) => { if (autopilotMode === 'OFF') controls.throttle = parseInt(e.target.value, 10); });
+            rudderSlider.addEventListener('input', (e) => { if (autopilotMode === 'OFF') controls.rudder = parseInt(e.target.value, 10); });
+            autopilotBtn.addEventListener('click', cycleAutopilotMode);
             window.addEventListener('keydown', (e) => {
-                keysPressed[e.key] = true;
-                // Prevent browser from scrolling with arrow keys
-                if (["ArrowUp", "ArrowDown", "ArrowLeft", "ArrowRight"].includes(e.key)) {
-                    e.preventDefault();
-                }
+                if (autopilotMode === 'OFF') keysPressed[e.key] = true;
+                if (["ArrowUp", "ArrowDown", "ArrowLeft", "ArrowRight"].includes(e.key)) e.preventDefault();
             });
-            window.addEventListener('keyup', (e) => {
-                keysPressed[e.key] = false;
-            });
-            
-            window.addEventListener('resize', () => {
-                canvas.width = window.innerWidth;
-                canvas.height = window.innerHeight;
-            });
+            window.addEventListener('keyup', (e) => { keysPressed[e.key] = false; });
+            window.addEventListener('resize', () => { canvas.width = window.innerWidth; canvas.height = window.innerHeight; });
             
             setInterval(generateNewWind, 15000);
             animate();
         }
 
+        function cycleAutopilotMode() {
+            keysPressed = {};
+            switch(autopilotMode) {
+                case 'OFF':
+                    autopilotMode = 'ANCHOR';
+                    anchorTarget = { x: boat.x, y: boat.y };
+                    autopilotBtn.textContent = 'Anchor ON';
+                    autopilotBtn.classList.replace('bg-blue-500', 'bg-green-500');
+                    autopilotBtn.classList.replace('hover:bg-blue-600', 'hover:bg-green-600');
+                    autopilotStatus.textContent = 'ANCHOR';
+                    autopilotStatus.classList.replace('text-red-600', 'text-green-600');
+                    break;
+                case 'ANCHOR':
+                    autopilotMode = 'WIND_VANE';
+                    anchorTarget = null;
+                    autopilotBtn.textContent = 'Wind Vane ON';
+                    autopilotBtn.classList.replace('bg-green-500', 'bg-yellow-500');
+                    autopilotBtn.classList.replace('hover:bg-green-600', 'hover:bg-yellow-600');
+                    autopilotStatus.textContent = 'WIND_VANE';
+                    autopilotStatus.classList.replace('text-green-600', 'text-yellow-800');
+                    break;
+                case 'WIND_VANE':
+                    autopilotMode = 'OFF';
+                    autopilotBtn.textContent = 'Autopilot OFF';
+                    autopilotBtn.classList.replace('bg-yellow-500', 'bg-blue-500');
+                    autopilotBtn.classList.replace('hover:bg-yellow-600', 'hover:bg-blue-600');
+                    autopilotStatus.textContent = 'OFF';
+                    autopilotStatus.classList.replace('text-yellow-800', 'text-red-600');
+                    break;
+            }
+        }
+        
         function generateNewWind() {
-            wind.speed = Math.random() * 10;
-            wind.direction = Math.random() * 2 * Math.PI;
+            const speed = Math.random() * 8;
+            const dir = Math.random() * 2 * Math.PI;
+            trueWind.vx = Math.cos(dir) * speed;
+            trueWind.vy = Math.sin(dir) * speed;
         }
 
-        /**
-         * Reads keyboard input and updates control state.
-         */
-        function handleKeyboardControls() {
-            if (keysPressed['ArrowUp']) {
-                controls.throttle = Math.min(100, controls.throttle + THROTTLE_KEY_RATE);
-            }
-            if (keysPressed['ArrowDown']) {
-                controls.throttle = Math.max(0, controls.throttle - THROTTLE_KEY_RATE);
-            }
-            if (keysPressed['ArrowLeft']) {
-                controls.rudder = Math.max(-45, controls.rudder - RUDDER_KEY_RATE);
-            }
-            if (keysPressed['ArrowRight']) {
-                controls.rudder = Math.min(45, controls.rudder + RUDDER_KEY_RATE);
-            }
-        }
+        // --- Kalman Filter Logic (Refactored with math.js) ---
+        function runKalmanFilter() {
+            const I6 = math.identity(6);
 
-        function update() {
-            // 1. Handle keyboard input
-            handleKeyboardControls();
-
-            // 2. Calculate engine force based on throttle
+            // --- 1. PREDICT ---
+            const F = math.matrix([
+                [1, 0, DT, 0, 0, 0],
+                [0, 1, 0, DT, 0, 0],
+                [0, 0, 1 - (WATER_DRAG_COEFFICIENT * DT), 0, WIND_FORCE_COEFFICIENT * DT, 0],
+                [0, 0, 0, 1 - (WATER_DRAG_COEFFICIENT * DT), 0, WIND_FORCE_COEFFICIENT * DT],
+                [0, 0, 0, 0, 1, 0],
+                [0, 0, 0, 0, 0, 1]
+            ]);
+            
             const engineForce = (controls.throttle / 100) * MAX_THROTTLE_FORCE;
+            const B_u = math.matrix([
+                0, 0,
+                Math.cos(boat.angle) * engineForce * DT,
+                Math.sin(boat.angle) * engineForce * DT,
+                0, 0
+            ]);
 
-            // 3. Calculate forward acceleration
-            const forward_ax = Math.cos(boat.angle) * engineForce;
-            const forward_ay = Math.sin(boat.angle) * engineForce;
+            // Predict state: x_pred = F * x + B*u
+            const x_pred = math.add(math.multiply(F, kf.x), B_u);
+
+            // Predict error covariance: P_pred = F * P * F_T + Q
+            const P_pred = math.add(math.multiply(math.multiply(F, kf.P), math.transpose(F)), kf.Q);
             
-            // 4. Update velocity based on acceleration
-            boat.vx += forward_ax;
-            boat.vy += forward_ay;
-
-            // 5. Apply wind force
-            const wind_vx = Math.cos(wind.direction) * wind.speed * WIND_INFLUENCE_FACTOR;
-            const wind_vy = Math.sin(wind.direction) * wind.speed * WIND_INFLUENCE_FACTOR;
-            boat.vx += wind_vx;
-            boat.vy += wind_vy;
-
-            // 6. Apply water drag
-            boat.vx *= WATER_DRAG_COEFFICIENT;
-            boat.vy *= WATER_DRAG_COEFFICIENT;
-
-            // 7. Update boat's position
-            boat.x += boat.vx;
-            boat.y += boat.vy;
+            // --- 2. UPDATE ---
+            const z = math.matrix([boat.x + gaussianRandom() * GPS_NOISE, boat.y + gaussianRandom() * GPS_NOISE]);
             
-            // 8. Calculate total speed
-            boat.speed = Math.sqrt(boat.vx * boat.vx + boat.vy * boat.vy);
+            // Innovation: y = z - H * x_pred
+            const y = math.subtract(z, math.multiply(kf.H, x_pred));
+            
+            // Innovation covariance: S = H * P_pred * H_T + R
+            const S = math.add(math.multiply(math.multiply(kf.H, P_pred), math.transpose(kf.H)), kf.R);
+            
+            // Kalman gain: K = P_pred * H_T * S^-1
+            const K = math.multiply(math.multiply(P_pred, math.transpose(kf.H)), math.inv(S));
 
-            // 9. Adjust boat angle
-            const rudderRadians = degreesToRadians(controls.rudder);
-            const turnRate = rudderRadians * boat.speed * TURN_RATE_FACTOR;
-            boat.angle += turnRate;
+            // Update state estimate: x = x_pred + K * y
+            kf.x = math.add(x_pred, math.multiply(K, y));
+            
+            // Update error covariance: P = (I - K * H) * P_pred
+            const I_KH = math.subtract(I6, math.multiply(K, kf.H));
+            kf.P = math.multiply(I_KH, P_pred);
+        }
 
-            // 10. Handle screen wrapping
-            if (boat.x > canvas.width + BOAT_LENGTH) boat.x = -BOAT_LENGTH;
-            if (boat.x < -BOAT_LENGTH) boat.x = canvas.width + BOAT_LENGTH;
-            if (boat.y > canvas.height + BOAT_LENGTH) boat.y = -BOAT_LENGTH;
-            if (boat.y < -BOAT_LENGTH) boat.y = canvas.height + BOAT_LENGTH;
+        // --- Control Logic ---
+        function handleKeyboardControls() {
+            if (keysPressed['ArrowUp']) controls.throttle = Math.min(100, controls.throttle + THROTTLE_KEY_RATE);
+            if (keysPressed['ArrowDown']) controls.throttle = Math.max(0, controls.throttle - THROTTLE_KEY_RATE);
+            if (keysPressed['ArrowLeft']) controls.rudder = Math.max(-45, controls.rudder - RUDDER_KEY_RATE);
+            if (keysPressed['ArrowRight']) controls.rudder = Math.min(45, controls.rudder + RUDDER_KEY_RATE);
+        }
 
-            // 11. Update UI displays
+        function runAutopilot() {
+            if(autopilotMode === 'ANCHOR') runAnchorMode();
+            else if(autopilotMode === 'WIND_VANE') runWindVaneMode();
+        }
+
+        function runAnchorMode() {
+            const dx = anchorTarget.x - boat.x, dy = anchorTarget.y - boat.y, dist = Math.sqrt(dx*dx + dy*dy);
+            if(dist < AP_STOPPING_DISTANCE) { controls.throttle = 0; controls.rudder = 0; return; }
+            const targetAngle = Math.atan2(dy, dx);
+            let angleError = Math.atan2(Math.sin(targetAngle - boat.angle), Math.cos(targetAngle - boat.angle));
+            controls.rudder = Math.max(-45, Math.min(45, (angleError * (180/Math.PI)) * RUDDER_P_GAIN));
+            if(Math.abs(angleError) < (Math.PI/1.5)) controls.throttle = Math.min(AP_MAX_THROTTLE, dist*THROTTLE_P_GAIN);
+            else controls.throttle = 5;
+        }
+        
+        function runWindVaneMode() {
+            const est_wind_dir = Math.atan2(kf.x.get([5]), kf.x.get([4]));
+            const targetAngle = est_wind_dir + Math.PI; // Point into wind
+            let angleError = Math.atan2(Math.sin(targetAngle - boat.angle), Math.cos(targetAngle - boat.angle));
+            controls.rudder = Math.max(-45, Math.min(45, (angleError * (180/Math.PI)) * RUDDER_P_GAIN * 1.5));
+            controls.throttle = WIND_VANE_THROTTLE;
+        }
+
+        // --- Main Loop ---
+        function animate() { requestAnimationFrame(animate); update(); draw(); }
+        function update() {
+            if (autopilotMode !== 'OFF') runAutopilot();
+            else handleKeyboardControls();
+
+            // True physics update
+            const engineForce = (controls.throttle / 100) * MAX_THROTTLE_FORCE;
+            const engine_fx = Math.cos(boat.angle) * engineForce;
+            const engine_fy = Math.sin(boat.angle) * engineForce;
+            const wind_fx = (trueWind.vx - boat.vx) * WIND_FORCE_COEFFICIENT;
+            const wind_fy = (trueWind.vy - boat.vy) * WIND_FORCE_COEFFICIENT;
+            const drag_fx = -boat.vx * WATER_DRAG_COEFFICIENT;
+            const drag_fy = -boat.vy * WATER_DRAG_COEFFICIENT;
+            const total_fx = engine_fx + wind_fx + drag_fx;
+            const total_fy = engine_fy + wind_fy + drag_fy;
+            boat.vx += total_fx * DT;
+            boat.vy += total_fy * DT;
+            boat.x += boat.vx * DT;
+            boat.y += boat.vy * DT;
+            boat.speed = Math.sqrt(boat.vx*boat.vx + boat.vy*boat.vy);
+            
+            const speedTurnEffect = boat.speed * TURN_RATE_FACTOR;
+            const throttleTurnEffect = (controls.throttle / 100) * THROTTLE_TURN_INFLUENCE;
+            const totalTurnPower = speedTurnEffect + throttleTurnEffect;
+            boat.angle += degreesToRadians(controls.rudder) * totalTurnPower * DT;
+            
+            runKalmanFilter();
+
+            if(boat.x > canvas.width + BOAT_LENGTH) boat.x = -BOAT_LENGTH; if(boat.x < -BOAT_LENGTH) boat.x=canvas.width+BOAT_LENGTH;
+            if(boat.y > canvas.height + BOAT_LENGTH) boat.y = -BOAT_LENGTH; if(boat.y < -BOAT_LENGTH) boat.y=canvas.height+BOAT_LENGTH;
+
             updateUI();
         }
         
         function draw() {
-            ctx.fillStyle = '#3b82f6';
-            ctx.fillRect(0, 0, canvas.width, canvas.height);
+            ctx.fillStyle = '#3b82f6'; ctx.fillRect(0,0,canvas.width,canvas.height);
+            if(anchorTarget) drawAnchorMarker();
             drawBoat();
             drawWindIndicator();
         }
         
+        function drawAnchorMarker() {
+            ctx.save(); ctx.translate(anchorTarget.x, anchorTarget.y); ctx.strokeStyle = '#f59e0b'; ctx.lineWidth=3; ctx.globalAlpha=0.9;
+            const s=15; ctx.beginPath(); ctx.moveTo(-s,-s); ctx.lineTo(s,s); ctx.moveTo(s,-s); ctx.lineTo(-s,s); ctx.stroke();
+            ctx.beginPath(); ctx.arc(0,0,s*1.5,0,2*Math.PI); ctx.stroke(); ctx.restore();
+        }
+
         function drawBoat() {
-            ctx.save();
-            ctx.translate(boat.x, boat.y);
-            ctx.rotate(boat.angle);
-
-            ctx.fillStyle = '#4B5563';
-            ctx.fillRect(-BOAT_LENGTH / 2, -BOAT_WIDTH / 2, BOAT_LENGTH, BOAT_WIDTH);
-
-            ctx.fillStyle = '#D1D5DB';
-            ctx.fillRect(-BOAT_LENGTH / 4, -BOAT_WIDTH / 2 + 2, BOAT_LENGTH / 2, BOAT_WIDTH - 4);
-
-            ctx.fillStyle = '#4B5563';
-            ctx.beginPath();
-            ctx.moveTo(BOAT_LENGTH / 2, -BOAT_WIDTH / 2);
-            ctx.lineTo(BOAT_LENGTH / 2 + 15, 0);
-            ctx.lineTo(BOAT_LENGTH / 2, BOAT_WIDTH / 2);
-            ctx.closePath();
-            ctx.fill();
-
-            ctx.restore();
+            ctx.save(); ctx.translate(boat.x, boat.y); ctx.rotate(boat.angle);
+            ctx.fillStyle = '#4B5563'; ctx.fillRect(-BOAT_LENGTH/2, -BOAT_WIDTH/2, BOAT_LENGTH, BOAT_WIDTH);
+            ctx.fillStyle = '#D1D5DB'; ctx.fillRect(-BOAT_LENGTH/4, -BOAT_WIDTH/2+2, BOAT_LENGTH/2, BOAT_WIDTH-4);
+            ctx.fillStyle = '#4B5563'; ctx.beginPath();
+            ctx.moveTo(BOAT_LENGTH/2,-BOAT_WIDTH/2); ctx.lineTo(BOAT_LENGTH/2+15,0); ctx.lineTo(BOAT_LENGTH/2,BOAT_WIDTH/2);
+            ctx.closePath(); ctx.fill(); ctx.restore();
         }
         
         function drawWindIndicator() {
-            const indicatorX = canvas.width - 60;
-            const indicatorY = 60;
-            const arrowLength = 25 + wind.speed * 2;
-            ctx.save();
-            ctx.translate(indicatorX, indicatorY);
-            ctx.rotate(wind.direction);
-            ctx.strokeStyle = 'rgba(255, 255, 255, 0.7)';
-            ctx.lineWidth = 3;
-            ctx.fillStyle = 'rgba(255, 255, 255, 0.7)';
-            ctx.beginPath();
-            ctx.moveTo(-arrowLength / 2, 0);
-            ctx.lineTo(arrowLength / 2, 0);
-            ctx.stroke();
-            ctx.beginPath();
-            ctx.moveTo(arrowLength / 2, 0);
-            ctx.lineTo(arrowLength / 2 - 10, -5);
-            ctx.lineTo(arrowLength / 2 - 10, 5);
-            ctx.closePath();
-            ctx.fill();
+            const windSpeed = Math.sqrt(trueWind.vx**2 + trueWind.vy**2);
+            const windDir = Math.atan2(trueWind.vy, trueWind.vx);
+            const indX=canvas.width-60, indY=60, arrLen=25+windSpeed*2;
+            ctx.save(); ctx.translate(indX,indY); ctx.rotate(windDir);
+            ctx.strokeStyle='rgba(255,255,255,0.7)'; ctx.lineWidth=3; ctx.fillStyle='rgba(255,255,255,0.7)';
+            ctx.beginPath(); ctx.moveTo(-arrLen/2,0); ctx.lineTo(arrLen/2,0); ctx.stroke();
+            ctx.beginPath(); ctx.moveTo(arrLen/2,0); ctx.lineTo(arrLen/2-10,-5); ctx.lineTo(arrLen/2-10,5); ctx.closePath(); ctx.fill();
             ctx.restore();
-            ctx.font = '20px sans-serif';
-            ctx.fillStyle = 'rgba(255, 255, 255, 0.7)';
-            ctx.fillText('W', indicatorX - 8, indicatorY + 8);
+            ctx.font='16px sans-serif'; ctx.fillStyle='rgba(255,255,255,0.7)';
+            ctx.fillText('True', indX-20, indY+25);
         }
 
-        /**
-         * Updates all UI elements to reflect the current state.
-         */
         function updateUI() {
-            // Update sliders to match state
-            throttleSlider.value = controls.throttle;
-            rudderSlider.value = controls.rudder;
-            
-            // Update text displays
-            const knots = (boat.speed * 10).toFixed(1);
-            speedDisplay.textContent = `${knots} knots`;
-            throttleValue.textContent = `${Math.round(controls.throttle)}%`;
-            rudderValue.textContent = `${Math.round(controls.rudder)}°`;
-            windSpeedDisplay.textContent = `${wind.speed.toFixed(1)} m/s`;
-            windDirDisplay.textContent = `${Math.round(radiansToDegrees(wind.direction))}°`;
+            throttleSlider.value=controls.throttle; rudderSlider.value=controls.rudder;
+            speedDisplay.textContent = `${(boat.speed * 1.944).toFixed(1)} knots`; // m/s to knots
+            throttleValue.textContent=`${Math.round(controls.throttle)}%`; rudderValue.textContent=`${Math.round(controls.rudder)}°`;
+            // True Wind
+            const trueSpeed = Math.sqrt(trueWind.vx**2 + trueWind.vy**2);
+            const trueDir = radiansToDegrees(Math.atan2(trueWind.vy, trueWind.vx));
+            windSpeedDisplay.textContent = `${trueSpeed.toFixed(1)} m/s`; windDirDisplay.textContent = `${Math.round(trueDir)}°`;
+            // Estimated Wind from math.js matrix
+            const est_vx = kf.x.get([4]);
+            const est_vy = kf.x.get([5]);
+            const est_speed = Math.sqrt(est_vx**2 + est_vy**2);
+            const est_dir = radiansToDegrees(Math.atan2(est_vy, est_vx));
+            estWindSpeedDisplay.textContent = `${est_speed.toFixed(1)} m/s`; estWindDirDisplay.textContent = `${Math.round(est_dir)}°`;
         }
 
-        function animate() {
-            update();
-            draw();
-            requestAnimationFrame(animate);
-        }
-
+        // --- Start Simulation ---
         window.onload = initialize;
     </script>
 </body>
