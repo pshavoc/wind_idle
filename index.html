@@ -367,7 +367,10 @@
         }
         
         function drawAnchorMarker() {
-            ctx.save(); ctx.translate(anchorTarget.x, anchorTarget.y); ctx.strokeStyle = '#f59e0b'; ctx.lineWidth=3; ctx.globalAlpha=0.9;
+            let x = screen_m_to_pix.m * anchorTarget.x + screen_m_to_pix.x;
+            let y = screen_m_to_pix.m * anchorTarget.y + screen_m_to_pix.y;
+
+            ctx.save(); ctx.translate(x, y); ctx.strokeStyle = '#f59e0b'; ctx.lineWidth=3; ctx.globalAlpha=0.9;
             const s=15; ctx.beginPath(); ctx.moveTo(-s,-s); ctx.lineTo(s,s); ctx.moveTo(s,-s); ctx.lineTo(-s,s); ctx.stroke();
             ctx.beginPath(); ctx.arc(0,0,s*1.5,0,2*Math.PI); ctx.stroke(); ctx.restore();
         }
