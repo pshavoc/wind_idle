@@ -6,6 +6,7 @@
     <title>Motorboat Simulation</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/mathjs/11.7.0/math.js"></script>
+    <script src="perlin.js"></script>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;700&display=swap" rel="stylesheet">
     <style>
         body {
@@ -138,6 +139,14 @@
         let autopilotMode = 'OFF';
         let anchorTarget = null;
 
+        // Wind noise state
+        let baseWindSpeed = 0;
+        let baseWindDirRadians = 0;
+        let perlinNoiseTime = 0;
+        const PERLIN_WIND_FREQUENCY = 0.1; // Hz
+        const MAX_WIND_DIR_CHANGE_DEGREES = 60; // +/- 30 degrees
+        let perlinGenerator = new PerlinNoise(); // Instantiate PerlinNoise class
+
         // --- Kalman Filter State (using math.js) ---
         // State x = [pos_x, pos_y, vel_x, vel_y, wind_vx, wind_vy]'
         let kf = {
@@ -177,6 +186,7 @@
             kf.R = math.multiply(math.identity(2), GPS_NOISE**2);
 
             generateNewWind();
+            updateTrueWindWithNoise(0); // Initialize trueWind with noise (at time 0)
 
             // --- Event Listeners ---
             throttleSlider.addEventListener('input', (e) => { controls.throttle = parseInt(e.target.value, 10); });
@@ -226,10 +236,11 @@
         }
         
         function generateNewWind() {
-            const speed = Math.random() * 8;
-            const dir = Math.random() * 2 * Math.PI;
-            trueWind.vx = Math.cos(dir) * speed;
-            trueWind.vy = Math.sin(dir) * speed;
+            baseWindSpeed = Math.random() * 8; // Speed in m/s
+            baseWindDirRadians = Math.random() * 2 * Math.PI;
+            // trueWind.vx = Math.cos(dir) * speed; // Old direct update
+            // trueWind.vy = Math.sin(dir) * speed; // Old direct update
+            // Initial trueWind calculation will be handled by updateTrueWindWithNoise
         }
 
         // --- Control Logic ---
@@ -260,7 +271,7 @@
             const targetAngle = est_wind_dir + Math.PI; // Point into wind
             let angleError = Math.atan2(Math.sin(targetAngle - boat.angle), Math.cos(targetAngle - boat.angle));
             controls.rudder = Math.max(-30, Math.min(30, (angleError * (180/Math.PI)) * RUDDER_P_GAIN));
-            // controls.throttle = WIND_VANE_THROTTLE;
+            // controls.throttle = WIND_VANE_THROTTLE; // This was commented out, keeping it so
         }
 
         // --- Main Loop ---
@@ -295,7 +306,20 @@
             handleKeyboardControls();
         }
 
+        function updateTrueWindWithNoise(dt) {
+            perlinNoiseTime += dt;
+            const noise = perlinGenerator.noise1D(perlinNoiseTime * PERLIN_WIND_FREQUENCY); // Use class method
+            const directionOffsetDegrees = noise * MAX_WIND_DIR_CHANGE_DEGREES;
+            const directionOffsetRadians = degreesToRadians(directionOffsetDegrees);
+
+            const currentWindDirRadians = baseWindDirRadians + directionOffsetRadians;
+
+            trueWind.vx = Math.cos(currentWindDirRadians) * baseWindSpeed;
+            trueWind.vy = Math.sin(currentWindDirRadians) * baseWindSpeed;
+        }
+
         function update_physics(dt) {
+            updateTrueWindWithNoise(dt); // Update wind with Perlin noise
 
             // True physics update
             
