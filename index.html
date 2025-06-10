@@ -112,8 +112,10 @@
         const BOAT_MASS = 272; // Mass of the boat in kg
 
         // --- Autopilot Constants ---
-        const AP_STOPPING_DISTANCE = 15, AP_MAX_THROTTLE = 40;
+        const AP_STOPPING_DISTANCE = 5, AP_MAX_THROTTLE = 40;
         const THROTTLE_P_GAIN = 0.5, RUDDER_P_GAIN = 0.8;
+        const AP_KI_GAIN = 0.05; // Integral gain for anchor mode throttle
+        const AP_MAX_INTEGRAL_ANCHOR = 400; // Max value for the anchor integral term
         const WIND_VANE_THROTTLE = 20;
 
         // --- Kalman Filter Constants ---
@@ -138,6 +140,7 @@
         let keysPressed = {};
         let autopilotMode = 'OFF';
         let anchorTarget = null;
+        let anchorIntegralError = 0; // Accumulated integral error for anchor mode
 
         // Wind noise state
         let baseWindSpeed = 0;
@@ -209,6 +212,7 @@
                 case 'OFF':
                     autopilotMode = 'ANCHOR';
                     anchorTarget = { x: boat.x, y: boat.y };
+                    anchorIntegralError = 0; // Reset integral error for anchor mode
                     autopilotBtn.textContent = 'Anchor ON';
                     autopilotBtn.classList.replace('bg-blue-500', 'bg-green-500');
                     autopilotBtn.classList.replace('hover:bg-blue-600', 'hover:bg-green-600');
@@ -258,12 +262,27 @@
 
         function runAnchorMode() {
             const dx = anchorTarget.x - boat.x, dy = anchorTarget.y - boat.y, dist = Math.sqrt(dx*dx + dy*dy);
-            if(dist < AP_STOPPING_DISTANCE) { controls.throttle = 0; controls.rudder = 0; return; }
             const targetAngle = Math.atan2(dy, dx);
             let angleError = Math.atan2(Math.sin(targetAngle - boat.angle), Math.cos(targetAngle - boat.angle));
             controls.rudder = Math.max(-30, Math.min(30, (angleError * (180/Math.PI)) * RUDDER_P_GAIN));
-            if(Math.abs(angleError) < (Math.PI/1.5)) controls.throttle = Math.min(AP_MAX_THROTTLE, dist*THROTTLE_P_GAIN);
-            else controls.throttle = 5;
+
+            let p_throttle = dist * THROTTLE_P_GAIN;
+            // Calculate integral contribution only if AP_KI_GAIN is defined and non-zero
+            let i_throttle = anchorIntegralError * AP_KI_GAIN;
+
+            if(Math.abs(angleError) < (Math.PI/1.5)) { // If pointing somewhat towards target
+                // Accumulate integral term (dist is the error)
+                if (typeof AP_KI_GAIN !== 'undefined' && AP_KI_GAIN !== 0) {
+                    anchorIntegralError += dist * DT; // DT is the physics time step
+                    // Clamp integral term to prevent windup
+                    anchorIntegralError = Math.max(-AP_MAX_INTEGRAL_ANCHOR, Math.min(AP_MAX_INTEGRAL_ANCHOR, anchorIntegralError));
+                }
+                controls.throttle = Math.min(AP_MAX_THROTTLE, Math.max(0, p_throttle + i_throttle));
+            } else {
+                controls.throttle = 5; // Fixed throttle for turning, maintain heading
+                // When turning sharply, we might not want to accumulate integral,
+                // or even decay it. For now, accumulation only happens if angleError is small.
+            }
         }
         
         function runWindVaneMode() {
