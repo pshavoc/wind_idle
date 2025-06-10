@@ -218,7 +218,7 @@
                     break;
                 case 'ANCHOR':
                     autopilotMode = 'WIND_VANE';
-                    anchorTarget = null;
+                    anchorTarget = { x: boat.x, y: boat.y };
                     autopilotBtn.textContent = 'Wind Vane ON';
                     autopilotBtn.classList.replace('bg-green-500', 'bg-yellow-500');
                     autopilotBtn.classList.replace('hover:bg-green-600', 'hover:bg-yellow-600');
@@ -227,6 +227,7 @@
                     break;
                 case 'WIND_VANE':
                     autopilotMode = 'OFF';
+                    anchorTarget = null; // Clear anchor target
                     autopilotBtn.textContent = 'Autopilot OFF';
                     autopilotBtn.classList.replace('bg-yellow-500', 'bg-blue-500');
                     autopilotBtn.classList.replace('hover:bg-yellow-600', 'hover:bg-blue-600');
