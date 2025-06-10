@@ -1,5 +1,8 @@
+(function() {
+const THROTTLE_P_GAIN = 0.25; // Example value, adjust as needed
+const THROTTLE_I_GAIN = 0.02; // Example value, adjust as needed
+
 const AP_MAX_THROTTLE = 40;
-const THROTTLE_P_GAIN = 0.5;
 const AP_KI_GAIN = 0.05;
 const AP_MAX_INTEGRAL_ANCHOR = 400;
 const AP_STOPPING_DISTANCE = 5;
@@ -30,3 +33,5 @@ function runAnchorMode() {
         throttlePID.reset(); // Reset throttle PID when not actively seeking target
     }
 }
+window.runAnchorMode = runAnchorMode; // Expose to global scope
+})();
