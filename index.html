@@ -102,19 +102,19 @@
         // --- Simulation Constants ---
         const DT = 1/20; // 50Hz
         const BOAT_LENGTH = 40, BOAT_WIDTH = 15, MAX_THROTTLE_FORCE = 10.0;
-        const WATER_DRAG_COEFFICIENT = 0.25, WIND_FORCE_COEFFICIENT = 0.01;
+        const WATER_DRAG_COEFFICIENT = 0.90, WIND_FORCE_COEFFICIENT = 0.30;
         const TURN_RATE_FACTOR = 0.1, THROTTLE_KEY_RATE = 0.5, RUDDER_KEY_RATE = 1;
         const THROTTLE_TURN_INFLUENCE = 1.3; // How much throttle affects turning authority
         const BOAT_MASS = 272; // Mass of the boat in kg
 
         // --- Autopilot Constants ---
         const AP_STOPPING_DISTANCE = 15, AP_MAX_THROTTLE = 40;
-        const THROTTLE_P_GAIN = 0.5, RUDDER_P_GAIN = 1.0;
-        const WIND_VANE_THROTTLE = 10;
+        const THROTTLE_P_GAIN = 0.5, RUDDER_P_GAIN = 0.8;
+        const WIND_VANE_THROTTLE = 20;
 
         // --- Kalman Filter Constants ---
         const PROCESS_NOISE_POS = 0.01, PROCESS_NOISE_VEL = 0.1, PROCESS_NOISE_WIND = 0.05;
-        const GPS_NOISE = 2.0; // Noise in pixels for the GPS measurement
+        const GPS_NOISE = 1.0; // Noise in pixels for the GPS measurement
 
         let screen_m_to_pix = {
             m: 1.0,
@@ -176,7 +176,7 @@
             generateNewWind();
 
             // --- Event Listeners ---
-            throttleSlider.addEventListener('input', (e) => { if (autopilotMode === 'OFF') controls.throttle = parseInt(e.target.value, 10); });
+            throttleSlider.addEventListener('input', (e) => { controls.throttle = parseInt(e.target.value, 10); });
             rudderSlider.addEventListener('input', (e) => { if (autopilotMode === 'OFF') controls.rudder = parseInt(e.target.value, 10); });
             autopilotBtn.addEventListener('click', cycleAutopilotMode);
             window.addEventListener('keydown', (e) => {
@@ -230,18 +230,18 @@
         }
 
         // --- Kalman Filter Logic (Refactored with math.js) ---
-        function runKalmanFilter() {
+        function runKalmanFilter(dt) {
             const I6 = math.identity(6);
 
-            const wind_fx =  (kf.x.get([4]) - kf.x.get([2])) * WIND_FORCE_COEFFICIENT * DT;
-            const wind_fy = (kf.x.get([5]) - kf.x.get([3])) * WIND_FORCE_COEFFICIENT * DT;
+            const wind_fx =  (kf.x.get([4]) - kf.x.get([2])) * WIND_FORCE_COEFFICIENT * dt;
+            const wind_fy = (kf.x.get([5]) - kf.x.get([3])) * WIND_FORCE_COEFFICIENT * dt;
 
             // --- 1. PREDICT ---
             const F = math.matrix([
-                [1, 0, DT, 0, 0, 0],
-                [0, 1, 0, DT, 0, 0],
-                [0, 0, 1.0 - (WATER_DRAG_COEFFICIENT * DT), 0, wind_fx, 0],
-                [0, 0, 0, 1.0 - (WATER_DRAG_COEFFICIENT * DT), 0, wind_fy],
+                [1, 0, dt, 0, 0, 0],
+                [0, 1, 0, dt, 0, 0],
+                [0, 0, 1 - WATER_DRAG_COEFFICIENT * dt, 0, WIND_FORCE_COEFFICIENT * dt, 0],
+                [0, 0, 0, 1-WATER_DRAG_COEFFICIENT * dt, 0, WIND_FORCE_COEFFICIENT * dt],
                 [0, 0, 0, 0, 1, 0],
                 [0, 0, 0, 0, 0, 1]
             ]);
@@ -249,8 +249,8 @@
             const engineForce = (controls.throttle / 100) * MAX_THROTTLE_FORCE;
             const B_u = math.matrix([
                 0, 0,
-                (Math.cos(boat.angle) * engineForce * DT),
-                (Math.sin(boat.angle) * engineForce * DT),
+                (Math.cos(boat.angle) * engineForce * dt),
+                (Math.sin(boat.angle) * engineForce * dt),
                 0, 0
             ]);
 
@@ -308,11 +308,12 @@
             const targetAngle = est_wind_dir + Math.PI; // Point into wind
             let angleError = Math.atan2(Math.sin(targetAngle - boat.angle), Math.cos(targetAngle - boat.angle));
             controls.rudder = Math.max(-30, Math.min(30, (angleError * (180/Math.PI)) * RUDDER_P_GAIN));
-            controls.throttle = WIND_VANE_THROTTLE;
+            // controls.throttle = WIND_VANE_THROTTLE;
         }
 
         // --- Main Loop ---
         let physicsTime = 0.0;
+        let filter_time = 0.0;
 
         function animate(now) { 
             requestAnimationFrame(animate);
@@ -323,6 +324,12 @@
                 physicsTime += DT * 1000; // Convert to milliseconds
             }
 
+            if (now - filter_time > 1000) {
+                runKalmanFilter(1.0);
+                filter_time = now;
+            }
+            
+
             pilot();
             draw();
         }
@@ -331,8 +338,9 @@
             if (autopilotMode !== 'OFF') {
                 runAutopilot();
             } else {
-                handleKeyboardControls();
+                
             }
+            handleKeyboardControls();
         }
 
         function update_physics(dt) {
@@ -340,11 +348,25 @@
             // True physics update
             
             const engineForce = (controls.throttle / 100) * MAX_THROTTLE_FORCE;
-            const hull_drag = (boat.speed * boat.speed) * WATER_DRAG_COEFFICIENT;
-            boat.speed += (engineForce - hull_drag) * dt;
+            // const hull_drag = (boat.speed * boat.speed) * WATER_DRAG_COEFFICIENT;
+            // boat.speed += (engineForce - hull_drag) * dt;
 
-            boat.vx = Math.cos(boat.angle) * boat.speed;
-            boat.vy = Math.sin(boat.angle) * boat.speed;
+            boat.speed = Math.sqrt(boat.vx * boat.vx + boat.vy * boat.vy);
+
+            const engine_fx = Math.cos(boat.angle) * engineForce;
+            const engine_fy = Math.sin(boat.angle) * engineForce;
+
+            const drag_fx = boat.vx * WATER_DRAG_COEFFICIENT;
+            const drag_fy = boat.vy * WATER_DRAG_COEFFICIENT;
+
+            const wind_fx = (trueWind.vx - boat.vx) * WIND_FORCE_COEFFICIENT;
+            const wind_fy = (trueWind.vy - boat.vy) * WIND_FORCE_COEFFICIENT;
+
+            const total_fx = engine_fx - drag_fx + wind_fx;
+            const total_fy = engine_fy - drag_fy + wind_fy;
+
+            boat.vx += total_fx * dt;
+            boat.vy += total_fy * dt;
 
             // Calculate wind force
             // const windForceX = (trueWind.vx - boat.vx) * WIND_FORCE_COEFFICIENT;
@@ -365,7 +387,7 @@
             const totalTurnPower = speedTurnEffect + throttleTurnEffect;
             boat.angle += degreesToRadians(controls.rudder) * totalTurnPower * dt;
             
-            runKalmanFilter();
+            
 
             
         }
