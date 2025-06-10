@@ -79,7 +79,7 @@
                     <!-- Rudder Control -->
                     <div class="flex items-center gap-3">
                         <label for="rudder" class="font-medium text-gray-800">Rudder:</label>
-                        <input type="range" id="rudder" min="-45" max="45" value="0" class="w-40 h-2 bg-gray-300 rounded-lg appearance-none cursor-pointer">
+                        <input type="range" id="rudder" min="-30" max="30" value="0" class="w-40 h-2 bg-gray-300 rounded-lg appearance-none cursor-pointer">
                         <span id="rudderValue" class="font-mono text-gray-800 w-12 text-right">0°</span>
                     </div>
                 </div>
@@ -102,9 +102,9 @@
         // --- Simulation Constants ---
         const DT = 1/20; // 50Hz
         const BOAT_LENGTH = 40, BOAT_WIDTH = 15, MAX_THROTTLE_FORCE = 10.0;
-        const WATER_DRAG_COEFFICIENT = 0.0026, WIND_FORCE_COEFFICIENT = 1.5;
-        const TURN_RATE_FACTOR = 0.01, THROTTLE_KEY_RATE = 0.5, RUDDER_KEY_RATE = 1;
-        const THROTTLE_TURN_INFLUENCE = 0.1; // How much throttle affects turning authority
+        const WATER_DRAG_COEFFICIENT = 0.25, WIND_FORCE_COEFFICIENT = 0.01;
+        const TURN_RATE_FACTOR = 0.1, THROTTLE_KEY_RATE = 0.5, RUDDER_KEY_RATE = 1;
+        const THROTTLE_TURN_INFLUENCE = 1.3; // How much throttle affects turning authority
         const BOAT_MASS = 272; // Mass of the boat in kg
 
         // --- Autopilot Constants ---
@@ -115,9 +115,20 @@
         // --- Kalman Filter Constants ---
         const PROCESS_NOISE_POS = 0.01, PROCESS_NOISE_VEL = 0.1, PROCESS_NOISE_WIND = 0.05;
         const GPS_NOISE = 2.0; // Noise in pixels for the GPS measurement
+
+        let screen_m_to_pix = {
+            m: 1.0,
+            x: 0.0,
+            y: 0.0,
+        };
         
         // --- Simulation State ---
-        let boat = { x: 0, y: 0, angle: -Math.PI / 2, speed: 0, vx: 0, vy: 0 };
+        let boat = { 
+            x: 0, y: 0,
+            vx: 0, vy: 0,
+            angle: -Math.PI / 2,
+            speed: 0,
+        };
         let trueWind = { vx: 0, vy: 0 };
         let controls = { throttle: 0, rudder: 0 };
         let keysPressed = {};
@@ -145,8 +156,15 @@
             canvas.height = window.innerHeight;
             
             // Initialize boat state
-            boat.x = canvas.width / 2;
-            boat.y = canvas.height / 2;
+            boat.x = 0;
+            boat.y = 0;
+
+            // initialize display scale
+            screen_m_to_pix.m = 10.0;
+            screen_m_to_pix.x = canvas.width / 2; // Center the boat in the middle of the screen
+            screen_m_to_pix.y = canvas.height / 2; // Center the boat in the middle of the screen
+
+
             
             // Initialize KF state using math.js
             kf.x.set([0], boat.x);
@@ -266,8 +284,8 @@
         function handleKeyboardControls() {
             if (keysPressed['ArrowUp']) controls.throttle = Math.min(100, controls.throttle + THROTTLE_KEY_RATE);
             if (keysPressed['ArrowDown']) controls.throttle = Math.max(0, controls.throttle - THROTTLE_KEY_RATE);
-            if (keysPressed['ArrowLeft']) controls.rudder = Math.max(-45, controls.rudder - RUDDER_KEY_RATE);
-            if (keysPressed['ArrowRight']) controls.rudder = Math.min(45, controls.rudder + RUDDER_KEY_RATE);
+            if (keysPressed['ArrowLeft']) controls.rudder = Math.max(-30, controls.rudder - RUDDER_KEY_RATE);
+            if (keysPressed['ArrowRight']) controls.rudder = Math.min(30, controls.rudder + RUDDER_KEY_RATE);
         }
 
         function runAutopilot() {
@@ -280,7 +298,7 @@
             if(dist < AP_STOPPING_DISTANCE) { controls.throttle = 0; controls.rudder = 0; return; }
             const targetAngle = Math.atan2(dy, dx);
             let angleError = Math.atan2(Math.sin(targetAngle - boat.angle), Math.cos(targetAngle - boat.angle));
-            controls.rudder = Math.max(-45, Math.min(45, (angleError * (180/Math.PI)) * RUDDER_P_GAIN));
+            controls.rudder = Math.max(-30, Math.min(30, (angleError * (180/Math.PI)) * RUDDER_P_GAIN));
             if(Math.abs(angleError) < (Math.PI/1.5)) controls.throttle = Math.min(AP_MAX_THROTTLE, dist*THROTTLE_P_GAIN);
             else controls.throttle = 5;
         }
@@ -289,7 +307,7 @@
             const est_wind_dir = Math.atan2(kf.x.get([5]), kf.x.get([4]));
             const targetAngle = est_wind_dir + Math.PI; // Point into wind
             let angleError = Math.atan2(Math.sin(targetAngle - boat.angle), Math.cos(targetAngle - boat.angle));
-            controls.rudder = Math.max(-45, Math.min(45, (angleError * (180/Math.PI)) * RUDDER_P_GAIN * 1.5));
+            controls.rudder = Math.max(-30, Math.min(30, (angleError * (180/Math.PI)) * RUDDER_P_GAIN));
             controls.throttle = WIND_VANE_THROTTLE;
         }
 
@@ -320,26 +338,24 @@
         function update_physics(dt) {
 
             // True physics update
-            const engineForce = (controls.throttle / 100) * MAX_THROTTLE_FORCE;
-            boat.speed += engineForce * dt;
-
-            const SLIPPAGE = 0.07;
-
             
+            const engineForce = (controls.throttle / 100) * MAX_THROTTLE_FORCE;
+            const hull_drag = (boat.speed * boat.speed) * WATER_DRAG_COEFFICIENT;
+            boat.speed += (engineForce - hull_drag) * dt;
 
-            // boat.speed = Math.sqrt(boat.vx*boat.vx + boat.vy*boat.vy);
-            // boat.speed -= boat.speed * boat.speed * WATER_DRAG_COEFFICIENT * dt;
-            // boat.vx = Math.cos(boat.angle) * boat.speed;
-            // boat.vy = Math.sin(boat.angle) * boat.speed;
+            boat.vx = Math.cos(boat.angle) * boat.speed;
+            boat.vy = Math.sin(boat.angle) * boat.speed;
 
             // Calculate wind force
-            const windForceX = (trueWind.vx - boat.vx) * WIND_FORCE_COEFFICIENT;
-            const windForceY = (trueWind.vy - boat.vy) * WIND_FORCE_COEFFICIENT;
-            boat.vx += windForceX * dt;
-            boat.vy += windForceY * dt;
+            // const windForceX = (trueWind.vx - boat.vx) * WIND_FORCE_COEFFICIENT;
+            // const windForceY = (trueWind.vy - boat.vy) * WIND_FORCE_COEFFICIENT;
+            // boat.vx += windForceX * dt;
+            // boat.vy += windForceY * dt;
 
-            // boat.vx += total_fx * dt;
-            // boat.vy += total_fy * dt;
+
+
+
+
             boat.x += boat.vx * dt;
             boat.y += boat.vy * dt;
             
@@ -351,10 +367,7 @@
             
             runKalmanFilter();
 
-            if(boat.x > canvas.width + BOAT_LENGTH) boat.x = -BOAT_LENGTH; if(boat.x < -BOAT_LENGTH) boat.x=canvas.width+BOAT_LENGTH;
-            if(boat.y > canvas.height + BOAT_LENGTH) boat.y = -BOAT_LENGTH; if(boat.y < -BOAT_LENGTH) boat.y=canvas.height+BOAT_LENGTH;
-
-            updateUI();
+            
         }
         
         function draw() {
@@ -362,6 +375,21 @@
             if(anchorTarget) drawAnchorMarker();
             drawBoat();
             drawWindIndicator();
+
+            let x = screen_m_to_pix.m * boat.x + screen_m_to_pix.x;
+            let y = screen_m_to_pix.m * boat.y + screen_m_to_pix.y;
+
+            if(x > canvas.width - 50) {
+                screen_m_to_pix.x -= canvas.width;
+            } else if(x < 50) {
+                screen_m_to_pix.x += canvas.width;
+            } else if(y > canvas.height - 50) {
+                screen_m_to_pix.y -= canvas.height;
+            } else if(y < 50) {
+                screen_m_to_pix.y += canvas.height;
+            }
+
+            updateUI();
         }
         
         function drawAnchorMarker() {
@@ -371,7 +399,10 @@
         }
 
         function drawBoat() {
-            ctx.save(); ctx.translate(boat.x, boat.y); ctx.rotate(boat.angle);
+            let x = screen_m_to_pix.m * boat.x + screen_m_to_pix.x;
+            let y = screen_m_to_pix.m * boat.y + screen_m_to_pix.y;
+
+            ctx.save(); ctx.translate(x, y); ctx.rotate(boat.angle);
             ctx.fillStyle = '#4B5563'; ctx.fillRect(-BOAT_LENGTH/2, -BOAT_WIDTH/2, BOAT_LENGTH, BOAT_WIDTH);
             ctx.fillStyle = '#D1D5DB'; ctx.fillRect(-BOAT_LENGTH/4, -BOAT_WIDTH/2+2, BOAT_LENGTH/2, BOAT_WIDTH-4);
             ctx.fillStyle = '#4B5563'; ctx.beginPath();
@@ -394,7 +425,7 @@
 
         function updateUI() {
             throttleSlider.value=controls.throttle; rudderSlider.value=controls.rudder;
-            speedDisplay.textContent = `${(boat.speed * 1.944).toFixed(1)} knots`; // m/s to knots
+            speedDisplay.textContent = `${boat.speed.toFixed(1)} m/s`; // m/s to knots
             throttleValue.textContent=`${Math.round(controls.throttle)}%`; rudderValue.textContent=`${Math.round(controls.rudder)}°`;
             // True Wind
             const trueSpeed = Math.sqrt(trueWind.vx**2 + trueWind.vy**2);
