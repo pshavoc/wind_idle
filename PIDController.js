@@ -18,7 +18,7 @@ class PIDController {
         // Integral term
         this.integralError += error * dt;
         if (this.maxIntegral !== null) {
-            this.integralError = Math.max(-this.maxIntegral, Math.min(this.maxIntegral, this.integralError));
+            this.integralError = clamp(this.integralError, -this.maxIntegral, this.maxIntegral);
         }
         const i_term = this.ki * this.integralError;
 
