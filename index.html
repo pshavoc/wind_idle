@@ -7,6 +7,7 @@
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/mathjs/11.7.0/math.js"></script>
     <script src="perlin.js"></script>
+    <script src="PIDController.js"></script> <!-- Add this line -->
     <script src="anchorMode.js"></script>
     <script src="windVaneMode.js"></script>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;700&display=swap" rel="stylesheet">
@@ -159,6 +160,7 @@
         function degreesToRadians(d) { return d * (Math.PI / 180); }
         function radiansToDegrees(r) { return (r * (180 / Math.PI) + 360) % 360; }
         function gaussianRandom() { let u=0,v=0; while(u===0)u=Math.random(); while(v===0)v=Math.random(); return Math.sqrt(-2.0*Math.log(u))*Math.cos(2.0*Math.PI*v); }
+        function clamp(value, min, max) { return Math.min(Math.max(value, min), max); }
 
         // --- Main Simulation Functions ---
         function initialize() {
