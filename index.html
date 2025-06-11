@@ -366,8 +366,8 @@
             boat.angle += degreesToRadians(controls.rudder) * totalTurnPower * dt;
             
             // --- Bubble generation ---
-            const bubbleCount = Math.floor(Math.random() * controls.throttle * 0.3); // More throttle = more bubbles
-            for (let i = 0; i < bubbleCount; i++) {
+            let genbubble = Math.random() < controls.throttle * 0.05;
+            if (genbubble) {
                 const spread = (Math.random() - 0.5) * 2.0; // Spread bubbles behind the boat
                 const angleOffset = (Math.random() - 0.5) * 0.1; // Slight random angle for bubbles
                 const angle = boat.angle + degreesToRadians(-controls.rudder) + Math.PI + angleOffset;
