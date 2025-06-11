@@ -154,6 +154,7 @@
         let autopilotMode = 'OFF';
         let anchorTarget = null;
         let anchorIntegralError = 0; // Accumulated integral error for anchor mode
+        let bubbles = []; // Add this line to store bubble particles
 
         // Wind noise state
         let baseWindSpeed = 0;
@@ -364,13 +365,45 @@
             const totalTurnPower = speedTurnEffect + throttleTurnEffect;
             boat.angle += degreesToRadians(controls.rudder) * totalTurnPower * dt;
             
-            
+            // --- Bubble generation ---
+            const bubbleCount = Math.floor(Math.random() * controls.throttle * 0.3); // More throttle = more bubbles
+            for (let i = 0; i < bubbleCount; i++) {
+                const spread = (Math.random() - 0.5) * 2.0; // Spread bubbles behind the boat
+                const angleOffset = (Math.random() - 0.5) * 0.1; // Slight random angle for bubbles
+                const angle = boat.angle + degreesToRadians(-controls.rudder) + Math.PI + angleOffset;
 
-            
+                // the bubbles should originate from the back of the boat
+                // Adjust origin to be behind the boat
+                let origin_x = boat.x - Math.cos(boat.angle) * 3.0;
+                let origin_y = boat.y - Math.sin(boat.angle) * 3.0;
+
+                bubbles.push({
+                    x: origin_x,
+                    y: origin_y,
+                    vx: Math.cos(angle) * engineForce, // Bubbles move opposite to thrust, influenced by boat speed
+                    vy: Math.sin(angle) * engineForce,
+                    life: 1 + Math.random() * 10, // Lifespan in seconds
+                    size: 1 + Math.random() * 3
+                });
+            }
+
+            // --- Update existing bubbles ---
+            for (let i = bubbles.length - 1; i >= 0; i--) {
+                let b = bubbles[i];
+                b.x += b.vx * dt;
+                b.y += b.vy * dt;
+                b.life -= dt;
+                b.size *= 0.98; // Bubbles shrink slightly
+
+                if (b.life <= 0 || b.size < 0.5) {
+                    bubbles.splice(i, 1); // Remove dead bubbles
+                }
+            }
         }
         
         function draw() {
             ctx.fillStyle = '#3b82f6'; ctx.fillRect(0,0,canvas.width,canvas.height);
+            drawBubbles(); // Draw bubbles before the boat
             if(anchorTarget) drawAnchorMarker();
             drawBoat();
             drawWindIndicator();
@@ -412,6 +445,17 @@
             ctx.closePath(); ctx.fill(); ctx.restore();
         }
         
+        function drawBubbles() {
+            ctx.fillStyle = 'rgba(255, 255, 255, 0.6)';
+            for (const b of bubbles) {
+                let x = screen_m_to_pix.m * b.x + screen_m_to_pix.x;
+                let y = screen_m_to_pix.m * b.y + screen_m_to_pix.y;
+                ctx.beginPath();
+                ctx.arc(x, y, b.size * screen_m_to_pix.m * 0.2, 0, Math.PI * 2); // Scale bubble size with screen zoom
+                ctx.fill();
+            }
+        }
+
         function drawWindIndicator() {
             const windSpeed = Math.sqrt(trueWind.vx**2 + trueWind.vy**2);
             const windDir = Math.atan2(trueWind.vy, trueWind.vx);

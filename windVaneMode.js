@@ -19,8 +19,9 @@ function runWindVaneMode() {
     document.getElementById('dy-value').textContent = relDy.toFixed(2);
     document.getElementById('dist-value').textContent = dist.toFixed(2);
 
-    const est_wind_dir = Math.atan2(kf.x.get([5]), kf.x.get([4]));
-    const targetAngle = est_wind_dir + Math.PI; // Point into wind
+    // Point into the wind
+    const targetAngle = Math.atan2(-kf.x.get([5]), -kf.x.get([4]));
+    
     let angleError = Math.atan2(Math.sin(targetAngle - boat.angle), Math.cos(targetAngle - boat.angle));
     let angleErrorDeg = angleError * (180/Math.PI);
 
