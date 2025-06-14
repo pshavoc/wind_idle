@@ -1,17 +1,36 @@
 // --- Kalman Filter Logic (Refactored with math.js) ---
 function runKalmanFilter(dt) {
+
+    // calc the boat's gps velocity
+    if (boat.prev_x === undefined || boat.prev_y === undefined) {
+        boat.prev_x = boat.x;
+        boat.prev_y = boat.y;
+        boat.gps_vx = 0;
+        boat.gps_vy = 0;
+        return; // Skip the first frame to avoid division by zero
+    }
+    boat.gps_vx = (boat.x - boat.prev_x) / dt;
+    boat.gps_vy = (boat.y - boat.prev_y) / dt;
+    boat.prev_x = boat.x;
+    boat.prev_y = boat.y;
+
     const I6 = math.identity(6);
 
     // Note: kf, boat, controls, WATER_DRAG_COEFFICIENT, WIND_FORCE_COEFFICIENT, 
     // MAX_THROTTLE_FORCE, GPS_NOISE, gaussianRandom, and math are expected to be global.
+
+    const vx = 1 - kf.x.get([2]) * WATER_DRAG_COEFFICIENT * dt;
+    const vy = 1 - kf.x.get([3]) * WATER_DRAG_COEFFICIENT * dt;
+
+    const wind_force_f = WIND_FORCE_COEFFICIENT * dt;
 
     // --- 1. PREDICT ---
     // State transition matrix F
     const F = math.matrix([
         [1, 0, dt, 0, 0, 0],
         [0, 1, 0, dt, 0, 0],
-        [0, 0, 1 - WATER_DRAG_COEFFICIENT * dt, 0, WIND_FORCE_COEFFICIENT * dt, 0],
-        [0, 0, 0, 1 - WATER_DRAG_COEFFICIENT * dt, 0, WIND_FORCE_COEFFICIENT * dt],
+        [0, 0, vx, 0, wind_force_f, 0],
+        [0, 0, 0, vy, 0, wind_force_f],
         [0, 0, 0, 0, 1, 0],
         [0, 0, 0, 0, 0, 1]
     ]);

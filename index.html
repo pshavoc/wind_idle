@@ -7,6 +7,7 @@
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/mathjs/11.7.0/math.js"></script>
     <script src="perlin.js"></script>
+    <script src="vector2d.js"></script>
     <script src="PIDController.js"></script> <!-- Add this line -->
     <script src="anchorMode.js"></script>
     <script src="windVaneMode.js"></script>
@@ -126,7 +127,7 @@
         // --- Simulation Constants ---
         const DT = 1/20; // 50Hz
         const BOAT_LENGTH = 40, BOAT_WIDTH = 15, MAX_THROTTLE_FORCE = 10.0;
-        const WATER_DRAG_COEFFICIENT = 0.90, WIND_FORCE_COEFFICIENT = 0.30;
+        const WATER_DRAG_COEFFICIENT = 0.08, WIND_FORCE_COEFFICIENT = 0.01;
         const TURN_RATE_FACTOR = 0.1, THROTTLE_KEY_RATE = 0.5, RUDDER_KEY_RATE = 1;
         const THROTTLE_TURN_INFLUENCE = 1.3; // How much throttle affects turning authority
         const BOAT_MASS = 272; // Mass of the boat in kg
@@ -147,6 +148,7 @@
             vx: 0, vy: 0,
             angle: -Math.PI / 2,
             speed: 0,
+            gps_vx: 0, gps_vy: 0, // GPS velocity components
         };
         let trueWind = { vx: 0, vy: 0 };
         let controls = { throttle: 0, rudder: 0 };
@@ -179,6 +181,19 @@
         function radiansToDegrees(r) { return (r * (180 / Math.PI) + 360) % 360; }
         function gaussianRandom() { let u=0,v=0; while(u===0)u=Math.random(); while(v===0)v=Math.random(); return Math.sqrt(-2.0*Math.log(u))*Math.cos(2.0*Math.PI*v); }
         function clamp(value, min, max) { return Math.min(Math.max(value, min), max); }
+        function norm(x, y) {
+            const mag = Math.sqrt(x*x + y*y);
+            if (mag == 0) {
+                return {
+                    x: 0,
+                    y: 0,
+                };
+            }
+            return {
+                x: x / mag,
+                y: y / mag,
+            };
+        }
 
         // --- Main Simulation Functions ---
         function initialize() {
@@ -226,7 +241,7 @@
             switch(autopilotMode) {
                 case 'OFF':
                     autopilotMode = 'ANCHOR';
-                    anchorTarget = { x: boat.x, y: boat.y };
+                    anchorTarget = { x: 0, y: 0 };
                     anchorIntegralError = 0; // Reset integral error for anchor mode
                     autopilotBtn.textContent = 'Anchor ON';
                     autopilotBtn.classList.replace('bg-blue-500', 'bg-green-500');
@@ -236,7 +251,7 @@
                     break;
                 case 'ANCHOR':
                     autopilotMode = 'WIND_VANE';
-                    anchorTarget = { x: boat.x, y: boat.y };
+                    anchorTarget = { x: 0, y: 0 };
                     autopilotBtn.textContent = 'Wind Vane ON';
                     autopilotBtn.classList.replace('bg-green-500', 'bg-yellow-500');
                     autopilotBtn.classList.replace('hover:bg-green-600', 'hover:bg-yellow-600');
@@ -316,8 +331,10 @@
 
             const currentWindDirRadians = baseWindDirRadians + directionOffsetRadians;
 
-            trueWind.vx = Math.cos(currentWindDirRadians) * baseWindSpeed;
-            trueWind.vy = Math.sin(currentWindDirRadians) * baseWindSpeed;
+            const windSpeedNoise = perlinGenerator.noise1D(perlinNoiseTime * 0.1) * 2.0;
+
+            trueWind.vx = Math.cos(currentWindDirRadians) * (baseWindSpeed + windSpeedNoise);
+            trueWind.vy = Math.sin(currentWindDirRadians) * (baseWindSpeed + windSpeedNoise);
         }
 
         function update_physics(dt) {
@@ -334,27 +351,24 @@
             const engine_fx = Math.cos(boat.angle) * engineForce;
             const engine_fy = Math.sin(boat.angle) * engineForce;
 
-            const drag_fx = boat.vx * WATER_DRAG_COEFFICIENT;
-            const drag_fy = boat.vy * WATER_DRAG_COEFFICIENT;
+            const BOAT_HULL_AREA = 0.500;
+            const drag_norm = norm(boat.vx, boat.vy);
+            const drag_area_x = Math.sin(boat.angle) * BOAT_HULL_AREA;
+            const drag_area_y = Math.cos(boat.angle) * BOAT_HULL_AREA;
 
-            const wind_fx = (trueWind.vx - boat.vx) * WIND_FORCE_COEFFICIENT;
-            const wind_fy = (trueWind.vy - boat.vy) * WIND_FORCE_COEFFICIENT;
+            
+            let drag_fx = -drag_norm.x * (boat.vx * boat.vx) * WATER_DRAG_COEFFICIENT;
+            let drag_fy = -drag_norm.y * (boat.vy * boat.vy) * WATER_DRAG_COEFFICIENT;
 
-            const total_fx = engine_fx - drag_fx + wind_fx;
-            const total_fy = engine_fy - drag_fy + wind_fy;
+            const wind_norm = norm(trueWind.vx, trueWind.vy);
+            const wind_fx = wind_norm.x * (trueWind.vx * trueWind.vx) * WIND_FORCE_COEFFICIENT;
+            const wind_fy = wind_norm.y * (trueWind.vy * trueWind.vy) * WIND_FORCE_COEFFICIENT;
+
+            const total_fx = engine_fx + drag_fx + wind_fx;
+            const total_fy = engine_fy + drag_fy + wind_fy;
 
             boat.vx += total_fx * dt;
             boat.vy += total_fy * dt;
-
-            // Calculate wind force
-            // const windForceX = (trueWind.vx - boat.vx) * WIND_FORCE_COEFFICIENT;
-            // const windForceY = (trueWind.vy - boat.vy) * WIND_FORCE_COEFFICIENT;
-            // boat.vx += windForceX * dt;
-            // boat.vy += windForceY * dt;
-
-
-
-
 
             boat.x += boat.vx * dt;
             boat.y += boat.vy * dt;
