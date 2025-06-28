@@ -1,6 +1,6 @@
 (function() {
-const THROTTLE_P_GAIN = 4.0;
-const THROTTLE_I_GAIN = 1.0;
+const THROTTLE_P_GAIN = 2.0;
+const THROTTLE_I_GAIN = 0.1;
 const RUDDER_P_GAIN = 2.0;
 const RUDDER_I_GAIN = 0.0;
 
@@ -42,13 +42,13 @@ function runWindVaneMode() {
     const LOIT_RADIUS = 25.0;
     const DEFAULT_SPEED = 3.0;
     const LOIT_SPEED_GAIN = 0.5;
-    const LOIT_ANGLE_GAIN = 0.1;
+    const LOIT_ANGLE_GAIN = 0.75;
 
     // Point into the wind
     let into_wind_angle_rad = Math.atan2(-kf.x.get([5]), -kf.x.get([4]));
     const is_pointing_into_wind = Math.abs(into_wind_angle_rad - boat.angle) < Math.PI / 2;
     // modify the target angle to 'lean' towards the destination
-    into_wind_angle_rad += clamp(relDy * LOIT_ANGLE_GAIN, -Math.PI / 4, Math.PI / 4);
+    into_wind_angle_rad += clamp(relDy * LOIT_ANGLE_GAIN, -Math.PI / 10, Math.PI / 10);
 
     // todo: add some wind_angle error
 

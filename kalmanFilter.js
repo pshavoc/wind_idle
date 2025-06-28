@@ -19,18 +19,21 @@ function runKalmanFilter(dt) {
     // Note: kf, boat, controls, WATER_DRAG_COEFFICIENT, WIND_FORCE_COEFFICIENT, 
     // MAX_THROTTLE_FORCE, GPS_NOISE, gaussianRandom, and math are expected to be global.
 
-    const vx = 1 - kf.x.get([2]) * WATER_DRAG_COEFFICIENT * dt;
-    const vy = 1 - kf.x.get([3]) * WATER_DRAG_COEFFICIENT * dt;
+    const vx = 1 - Math.abs(kf.x.get([2])) * WATER_DRAG_COEFFICIENT / 2 * dt;
+    const vy = 1 - Math.abs(kf.x.get([3])) * WATER_DRAG_COEFFICIENT / 2 * dt;
 
-    const wind_force_f = WIND_FORCE_COEFFICIENT * dt;
+    //const w_xf = Math.abs(kf.x.get([4])) * WIND_FORCE_COEFFICIENT * dt;
+    //const w_yf = Math.abs(kf.x.get([5])) * WIND_FORCE_COEFFICIENT * dt;
+    const w_xf = WIND_FORCE_COEFFICIENT * 0.5 * dt;
+    const w_yf = WIND_FORCE_COEFFICIENT * 0.5 * dt;
 
     // --- 1. PREDICT ---
     // State transition matrix F
     const F = math.matrix([
         [1, 0, dt, 0, 0, 0],
         [0, 1, 0, dt, 0, 0],
-        [0, 0, vx, 0, wind_force_f, 0],
-        [0, 0, 0, vy, 0, wind_force_f],
+        [0, 0, vx, 0, w_xf, 0],
+        [0, 0, 0, vy, 0, w_yf],
         [0, 0, 0, 0, 1, 0],
         [0, 0, 0, 0, 0, 1]
     ]);

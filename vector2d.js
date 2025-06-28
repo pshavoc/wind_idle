@@ -13,6 +13,10 @@ class Vector2D {
         return this;
     }
 
+    clone() {
+        return new Vector2D(this.x, this.y);
+    }
+
     length() {
         return Math.sqrt(this.x * this.x + this.y * this.y);
     }
@@ -33,9 +37,32 @@ class Vector2D {
         return this;
     }
 
+    subtract(otherVector) {
+        this.x -= otherVector.x;
+        this.y -= otherVector.y;
+        return this;
+    }
+
     addScalar(scalar) {
         this.x += scalar;
         this.y += scalar;
+        return this;
+    }
+
+    multiplyScalar(scalar) {
+        this.x *= scalar;
+        this.y *= scalar;
+        return this;
+    }
+
+    divideScalar(scalar) {
+        if (scalar !== 0) {
+            this.x /= scalar;
+            this.y /= scalar;
+        } else {
+            this.x = 0;
+            this.y = 0;
+        }
         return this;
     }
 

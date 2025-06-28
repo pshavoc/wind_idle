@@ -128,9 +128,7 @@
         const DT = 1/20; // 50Hz
         const BOAT_LENGTH = 40, BOAT_WIDTH = 15, MAX_THROTTLE_FORCE = 10.0;
         const WATER_DRAG_COEFFICIENT = 0.08, WIND_FORCE_COEFFICIENT = 0.01;
-        const TURN_RATE_FACTOR = 0.1, THROTTLE_KEY_RATE = 0.5, RUDDER_KEY_RATE = 1;
-        const THROTTLE_TURN_INFLUENCE = 1.3; // How much throttle affects turning authority
-        const BOAT_MASS = 272; // Mass of the boat in kg
+        
 
         // --- Kalman Filter Constants ---
         const PROCESS_NOISE_POS = 0.01, PROCESS_NOISE_VEL = 0.1, PROCESS_NOISE_WIND = 0.05;
@@ -144,13 +142,12 @@
         
         // --- Simulation State ---
         let boat = { 
-            x: 0, y: 0,
-            vx: 0, vy: 0,
-            angle: -Math.PI / 2,
-            speed: 0,
-            gps_vx: 0, gps_vy: 0, // GPS velocity components
+            pos: new Vector2D(0, 0), // Position in meters
+            velocity: new Vector2D(0, 0), // Velocity in m/s
+            angle: -Math.PI / 2, // Angle in radians (facing up)
+            angularVelocity: 0, // Angular velocity in radians/s
         };
-        let trueWind = { vx: 0, vy: 0 };
+        let trueWind = new Vector2D(0, 0); // Wind vector in m/s
         let controls = { throttle: 0, rudder: 0 };
         let keysPressed = {};
         let autopilotMode = 'OFF';
@@ -162,7 +159,7 @@
         let baseWindSpeed = 0;
         let baseWindDirRadians = 0;
         let perlinNoiseTime = 0;
-        const PERLIN_WIND_FREQUENCY = 0.1; // Hz
+        const PERLIN_WIND_FREQUENCY = 0.001; // Hz
         const MAX_WIND_DIR_CHANGE_DEGREES = 60; // +/- 30 degrees
         let perlinGenerator = new PerlinNoise(); // Instantiate PerlinNoise class
 
@@ -333,51 +330,26 @@
 
             const windSpeedNoise = perlinGenerator.noise1D(perlinNoiseTime * 0.1) * 2.0;
 
-            trueWind.vx = Math.cos(currentWindDirRadians) * (baseWindSpeed + windSpeedNoise);
-            trueWind.vy = Math.sin(currentWindDirRadians) * (baseWindSpeed + windSpeedNoise);
+            trueWind.x = Math.cos(currentWindDirRadians) * (baseWindSpeed + windSpeedNoise);
+            trueWind.y = Math.sin(currentWindDirRadians) * (baseWindSpeed + windSpeedNoise);
         }
 
         function update_physics(dt) {
             updateTrueWindWithNoise(dt); // Update wind with Perlin noise
 
-            // True physics update
             
-            const engineForce = (controls.throttle / 100) * MAX_THROTTLE_FORCE;
-            // const hull_drag = (boat.speed * boat.speed) * WATER_DRAG_COEFFICIENT;
-            // boat.speed += (engineForce - hull_drag) * dt;
+            let force = new Vector2D(0, 0);
 
-            boat.speed = Math.sqrt(boat.vx * boat.vx + boat.vy * boat.vy);
+            const engineForce = new Vector2D(Math.cos(boat.angle), Math.sin(boat.angle)).multiplyScalar( (controls.throttle / 100) * MAX_THROTTLE_FORCE);
 
-            const engine_fx = Math.cos(boat.angle) * engineForce;
-            const engine_fy = Math.sin(boat.angle) * engineForce;
+            force.add(engineForce);
 
-            const BOAT_HULL_AREA = 0.500;
-            const drag_norm = norm(boat.vx, boat.vy);
-            const drag_area_x = Math.sin(boat.angle) * BOAT_HULL_AREA;
-            const drag_area_y = Math.cos(boat.angle) * BOAT_HULL_AREA;
 
-            
-            let drag_fx = -drag_norm.x * (boat.vx * boat.vx) * WATER_DRAG_COEFFICIENT;
-            let drag_fy = -drag_norm.y * (boat.vy * boat.vy) * WATER_DRAG_COEFFICIENT;
+            boat.velocity.add( force.multiplyScalar(dt) )
+            boat.pos.add( boat.velocity.clone().multiplyScalar(dt) );
 
-            const wind_norm = norm(trueWind.vx, trueWind.vy);
-            const wind_fx = wind_norm.x * (trueWind.vx * trueWind.vx) * WIND_FORCE_COEFFICIENT;
-            const wind_fy = wind_norm.y * (trueWind.vy * trueWind.vy) * WIND_FORCE_COEFFICIENT;
 
-            const total_fx = engine_fx + drag_fx + wind_fx;
-            const total_fy = engine_fy + drag_fy + wind_fy;
-
-            boat.vx += total_fx * dt;
-            boat.vy += total_fy * dt;
-
-            boat.x += boat.vx * dt;
-            boat.y += boat.vy * dt;
-            
-            
-            const speedTurnEffect = boat.speed * TURN_RATE_FACTOR;
-            const throttleTurnEffect = (controls.throttle / 100) * THROTTLE_TURN_INFLUENCE;
-            const totalTurnPower = speedTurnEffect + throttleTurnEffect;
-            boat.angle += degreesToRadians(controls.rudder) * totalTurnPower * dt;
+            boat.speed = boat.velocity.length();
             
             // --- Bubble generation ---
             let genbubble = Math.random() < controls.throttle * 0.05;
@@ -422,8 +394,8 @@
             drawBoat();
             drawWindIndicator();
 
-            let x = screen_m_to_pix.m * boat.x + screen_m_to_pix.x;
-            let y = screen_m_to_pix.m * boat.y + screen_m_to_pix.y;
+            let x = screen_m_to_pix.m * boat.pos.x + screen_m_to_pix.x;
+            let y = screen_m_to_pix.m * boat.pos.y + screen_m_to_pix.y;
 
             if(x > canvas.width - 50) {
                 screen_m_to_pix.x -= canvas.width;
@@ -448,8 +420,8 @@
         }
 
         function drawBoat() {
-            let x = screen_m_to_pix.m * boat.x + screen_m_to_pix.x;
-            let y = screen_m_to_pix.m * boat.y + screen_m_to_pix.y;
+            let x = screen_m_to_pix.m * boat.pos.x + screen_m_to_pix.x;
+            let y = screen_m_to_pix.m * boat.pos.y + screen_m_to_pix.y;
 
             ctx.save(); ctx.translate(x, y); ctx.rotate(boat.angle);
             ctx.fillStyle = '#4B5563'; ctx.fillRect(-BOAT_LENGTH/2, -BOAT_WIDTH/2, BOAT_LENGTH, BOAT_WIDTH);
@@ -471,8 +443,8 @@
         }
 
         function drawWindIndicator() {
-            const windSpeed = Math.sqrt(trueWind.vx**2 + trueWind.vy**2);
-            const windDir = Math.atan2(trueWind.vy, trueWind.vx);
+            const windSpeed = trueWind.length();
+            const windDir = trueWind.angle();
             const indX=canvas.width-60, indY=60, arrLen=25+windSpeed*2;
             ctx.save(); ctx.translate(indX,indY); ctx.rotate(windDir);
             ctx.strokeStyle='rgba(255,255,255,0.7)'; ctx.lineWidth=3; ctx.fillStyle='rgba(255,255,255,0.7)';
@@ -488,8 +460,8 @@
             speedDisplay.textContent = `${boat.speed.toFixed(1)} m/s`; // m/s to knots
             throttleValue.textContent=`${Math.round(controls.throttle)}%`; rudderValue.textContent=`${Math.round(controls.rudder)}°`;
             // True Wind
-            const trueSpeed = Math.sqrt(trueWind.vx**2 + trueWind.vy**2);
-            const trueDir = radiansToDegrees(Math.atan2(trueWind.vy, trueWind.vx));
+            const trueSpeed = trueWind.length();
+            const trueDir = radiansToDegrees(trueWind.angle());
             windSpeedDisplay.textContent = `${trueSpeed.toFixed(1)} m/s`; windDirDisplay.textContent = `${Math.round(trueDir)}°`;
             // Estimated Wind from math.js matrix
             const est_vx = kf.x.get([4]);
