@@ -126,7 +126,8 @@
         
         // --- Simulation Constants ---
         const DT = 1/20; // 50Hz
-        const BOAT_LENGTH = 40, BOAT_WIDTH = 15, MAX_THROTTLE_FORCE = 10.0;
+        const BOAT_LENGTH = 40, BOAT_WIDTH = 15, MAX_THROTTLE_FORCE = 1000.0;
+        const BOAT_MASS = 300; // Mass of the boat in kg
         const WATER_DRAG_COEFFICIENT = 0.08, WIND_FORCE_COEFFICIENT = 0.01;
         
 
@@ -135,7 +136,7 @@
         const GPS_NOISE = 1.0; // Noise in pixels for the GPS measurement
 
         let screen_m_to_pix = {
-            m: 1.0,
+            m: 0.1,
             x: 0.0,
             y: 0.0,
         };
@@ -344,9 +345,55 @@
 
             force.add(engineForce);
 
+            // --- Keel Physics (Symetric Airfoil Model) ---
+            if (boat.velocity.length() > 0.1) { // Only apply keel forces if moving to prevent division by zero
+                // Angle of attack (alpha) is the angle between the boat's heading and its velocity vector.
+                const boatDirection = new Vector2D(Math.cos(boat.angle), Math.sin(boat.angle));
+                const velocityNormal = boat.velocity.clone().normalize();
+                
+                let alpha = boatDirection.angleTo(boat.velocity);
 
-            boat.velocity.add( force.multiplyScalar(dt) )
+                // Use the 2D cross product to determine the sign of the angle (leeway direction).
+                const crossProduct = boatDirection.x * velocityNormal.y - boatDirection.y * velocityNormal.x;
+                if (crossProduct < 0) {
+                    alpha = -alpha;
+                }
+
+                // Simplified airfoil physics for the keel
+                const LIFT_COEFFICIENT = 0.7; // Adjusted for noticeable effect
+                const DRAG_COEFFICIENT = 2.0;  // Adjusted for noticeable effect
+                const KEEL_AREA = 0.04;       // m^2, effective area of the keel
+                const WATER_DENSITY = 1000;  // kg/m^3
+
+                const speedSq = boat.velocity.lengthSq();
+                const dynamicPressure = 0.5 * WATER_DENSITY * speedSq * KEEL_AREA;
+
+                // Lift and Drag coefficients as a function of angle of attack (alpha)
+                const cl = LIFT_COEFFICIENT * Math.sin(2 * alpha);
+                const cd = DRAG_COEFFICIENT * (1 - Math.cos(2 * alpha)) + 1.0;
+
+                const liftForceMag = dynamicPressure * cl;
+                const dragForceMag = dynamicPressure * cd;
+
+                // Lift force is perpendicular to the direction of water flow (velocity).
+                const liftAngle = boat.velocity.angle() + -Math.PI / 2;
+                const liftForce = new Vector2D(Math.cos(liftAngle), Math.sin(liftAngle)).multiplyScalar(liftForceMag);
+
+                // Drag force is opposite to the direction of velocity.
+                const dragForce = velocityNormal.multiplyScalar(-dragForceMag);
+
+                force.add(liftForce);
+                force.add(dragForce);
+            }
+
+
+            boat.velocity.add( force.multiplyScalar(dt / BOAT_MASS) )
             boat.pos.add( boat.velocity.clone().multiplyScalar(dt) );
+
+
+            boat.angularVelocity = (controls.rudder * boat.velocity.length()) * (Math.PI / 180); // Convert rudder angle to radians/s
+            boat.angle += boat.angularVelocity * dt;
+
 
 
             boat.speed = boat.velocity.length();

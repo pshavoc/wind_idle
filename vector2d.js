@@ -21,6 +21,10 @@ class Vector2D {
         return Math.sqrt(this.x * this.x + this.y * this.y);
     }
 
+    lengthSq() {
+        return this.x * this.x + this.y * this.y;
+    }
+
     dot(otherVector) {
         return this.x * otherVector.x + this.y * otherVector.y;
     }
