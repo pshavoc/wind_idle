@@ -2,8 +2,8 @@
 const THROTTLE_P_GAIN = 0.25; // Example value, adjust as needed
 const THROTTLE_I_GAIN = 0.02; // Example value, adjust as needed
 
-const AP_MAX_THROTTLE = 40;
-const AP_KI_GAIN = 0.05;
+const AP_MAX_THROTTLE = 20;
+const AP_KI_GAIN = 0.0;
 const AP_MAX_INTEGRAL_ANCHOR = 400;
 const AP_STOPPING_DISTANCE = 5;
 const RUDDER_P_GAIN = 0.8;
@@ -13,7 +13,7 @@ const throttlePID = new PIDController(THROTTLE_P_GAIN, AP_KI_GAIN, 0, AP_MAX_INT
 const rudderPID = new PIDController(RUDDER_P_GAIN, 0, 0, null);
 
 function runAnchorMode() {
-    const dx = anchorTarget.x - boat.x, dy = anchorTarget.y - boat.y, dist = Math.sqrt(dx*dx + dy*dy);
+    const dx = anchorTarget.x - boat.pos.x, dy = anchorTarget.y - boat.pos.y, dist = Math.sqrt(dx*dx + dy*dy);
     const targetAngle = Math.atan2(dy, dx);
     let angleError = Math.atan2(Math.sin(targetAngle - boat.angle), Math.cos(targetAngle - boat.angle));
     

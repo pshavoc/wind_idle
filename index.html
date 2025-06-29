@@ -126,9 +126,9 @@
         
         // --- Simulation Constants ---
         const DT = 1/20; // 50Hz
-        const BOAT_LENGTH = 40, BOAT_WIDTH = 15, MAX_THROTTLE_FORCE = 1000.0;
+        const BOAT_LENGTH = 40, BOAT_WIDTH = 15, MAX_THROTTLE_FORCE = 2000.0;
         const BOAT_MASS = 300; // Mass of the boat in kg
-        const WATER_DRAG_COEFFICIENT = 0.08, WIND_FORCE_COEFFICIENT = 0.01;
+        const WATER_DRAG_COEFFICIENT = 0.08, WIND_FORCE_COEFFICIENT = 0.001;
         
 
         // --- Kalman Filter Constants ---
@@ -338,6 +338,8 @@
         function update_physics(dt) {
             updateTrueWindWithNoise(dt); // Update wind with Perlin noise
 
+
+            const boatDirection = new Vector2D(Math.cos(boat.angle), Math.sin(boat.angle));
             
             let force = new Vector2D(0, 0);
 
@@ -348,7 +350,7 @@
             // --- Keel Physics (Symetric Airfoil Model) ---
             if (boat.velocity.length() > 0.1) { // Only apply keel forces if moving to prevent division by zero
                 // Angle of attack (alpha) is the angle between the boat's heading and its velocity vector.
-                const boatDirection = new Vector2D(Math.cos(boat.angle), Math.sin(boat.angle));
+                
                 const velocityNormal = boat.velocity.clone().normalize();
                 
                 let alpha = boatDirection.angleTo(boat.velocity);
@@ -360,9 +362,9 @@
                 }
 
                 // Simplified airfoil physics for the keel
-                const LIFT_COEFFICIENT = 0.7; // Adjusted for noticeable effect
-                const DRAG_COEFFICIENT = 2.0;  // Adjusted for noticeable effect
-                const KEEL_AREA = 0.04;       // m^2, effective area of the keel
+                const LIFT_COEFFICIENT = 1.0; // Adjusted for noticeable effect
+                const DRAG_COEFFICIENT = 0.7;  // Adjusted for noticeable effect
+                const KEEL_AREA = 0.08;       // m^2, effective area of the keel
                 const WATER_DENSITY = 1000;  // kg/m^3
 
                 const speedSq = boat.velocity.lengthSq();
@@ -386,12 +388,33 @@
                 force.add(dragForce);
             }
 
+            let apparentWind = trueWind.clone().add(boat.velocity.clone().multiplyScalar(-1)); // Apparent wind is the true wind minus the boat's velocity
+            const AIR_DENSITY = 1.225; // kg/m^3, density of air at sea level
+            const HULL_AREA = 5.0; // m^2, effective area of the hull
+            const WIND_DRAG_COEFFICIENT = 1.0; // Adjusted for noticeable effect
+            const dynamicPressure = 0.5 * AIR_DENSITY * apparentWind.lengthSq() * HULL_AREA;
+            const windDragForceMag = dynamicPressure * WIND_DRAG_COEFFICIENT;
+            let windForce = apparentWind.clone().normalize().multiplyScalar(windDragForceMag);
+            force.add(windForce);
+
+            // wind angle of attack
+            let alpha = boatDirection.angleTo(trueWind);
+            const trueWindNormal = trueWind.clone().normalize();
+            // Use the 2D cross product to determine the sign of the angle (leeway direction).
+            const crossProduct = boatDirection.x * trueWindNormal.y - boatDirection.y * trueWindNormal.x;
+            if (crossProduct < 0) {
+                alpha = -alpha;
+            }
+            boat.angularVelocity += Math.atan(alpha) * windForce.length() * 0.001 * dt; // Convert angle to radians/s
+
+            
 
             boat.velocity.add( force.multiplyScalar(dt / BOAT_MASS) )
             boat.pos.add( boat.velocity.clone().multiplyScalar(dt) );
 
 
-            boat.angularVelocity = (controls.rudder * boat.velocity.length()) * (Math.PI / 180); // Convert rudder angle to radians/s
+            boat.angularVelocity += (controls.rudder * engineForce.length() * 0.002 * dt) * (Math.PI / 180); // Convert rudder angle to radians/s
+            boat.angularVelocity *= 0.93;
             boat.angle += boat.angularVelocity * dt;
 
 
