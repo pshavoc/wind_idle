@@ -427,17 +427,18 @@
                 const spread = (Math.random() - 0.5) * 2.0; // Spread bubbles behind the boat
                 const angleOffset = (Math.random() - 0.5) * 0.1; // Slight random angle for bubbles
                 const angle = boat.angle + degreesToRadians(-controls.rudder) + Math.PI + angleOffset;
+                const forceMag = engineForce.length() * 0.002; // Bubbles move slower than the boat
 
                 // the bubbles should originate from the back of the boat
                 // Adjust origin to be behind the boat
-                let origin_x = boat.x - Math.cos(boat.angle) * 3.0;
-                let origin_y = boat.y - Math.sin(boat.angle) * 3.0;
+                let origin_x = boat.pos.x - Math.cos(boat.angle) * 3.0;
+                let origin_y = boat.pos.y - Math.sin(boat.angle) * 3.0;
 
                 bubbles.push({
                     x: origin_x,
                     y: origin_y,
-                    vx: Math.cos(angle) * engineForce, // Bubbles move opposite to thrust, influenced by boat speed
-                    vy: Math.sin(angle) * engineForce,
+                    vx: Math.cos(angle) * forceMag, // Bubbles move opposite to thrust, influenced by boat speed
+                    vy: Math.sin(angle) * forceMag,
                     life: 1 + Math.random() * 10, // Lifespan in seconds
                     size: 1 + Math.random() * 3
                 });
