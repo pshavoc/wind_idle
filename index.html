@@ -11,6 +11,7 @@
     <script src="PIDController.js"></script> <!-- Add this line -->
     <script src="anchorMode.js"></script>
     <script src="windVaneMode.js"></script>
+    <script src="kalmanFilter.js"></script>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;700&display=swap" rel="stylesheet">
     <style>
         body {
@@ -129,11 +130,6 @@
         const BOAT_LENGTH = 40, BOAT_WIDTH = 15, MAX_THROTTLE_FORCE = 2000.0;
         const BOAT_MASS = 300; // Mass of the boat in kg
         const WATER_DRAG_COEFFICIENT = 0.08, WIND_FORCE_COEFFICIENT = 0.001;
-        
-
-        // --- Kalman Filter Constants ---
-        const PROCESS_NOISE_POS = 0.01, PROCESS_NOISE_VEL = 0.1, PROCESS_NOISE_WIND = 0.05;
-        const GPS_NOISE = 1.0; // Noise in pixels for the GPS measurement
 
         let screen_m_to_pix = {
             m: 0.1,
@@ -164,15 +160,7 @@
         const MAX_WIND_DIR_CHANGE_DEGREES = 60; // +/- 30 degrees
         let perlinGenerator = new PerlinNoise(); // Instantiate PerlinNoise class
 
-        // --- Kalman Filter State (using math.js) ---
-        // State x = [pos_x, pos_y, vel_x, vel_y, wind_vx, wind_vy]'
-        let kf = {
-            x: math.zeros(6),
-            P: math.identity(6),
-            Q: math.identity(6),
-            R: math.identity(2),
-            H: math.matrix([[1, 0, 0, 0, 0, 0], [0, 1, 0, 0, 0, 0]])
-        };
+        let kalmanFilter = new KalmanFilter();
         
         // --- Utility Functions ---
         function degreesToRadians(d) { return d * (Math.PI / 180); }
@@ -207,14 +195,6 @@
             screen_m_to_pix.x = canvas.width / 2; // Center the boat in the middle of the screen
             screen_m_to_pix.y = canvas.height / 2; // Center the boat in the middle of the screen
 
-
-            
-            // Initialize KF state using math.js
-            kf.x.set([0], boat.x);
-            kf.x.set([1], boat.y);
-            kf.P = math.multiply(math.identity(6), 100);
-            kf.Q = math.diag([PROCESS_NOISE_POS, PROCESS_NOISE_POS, PROCESS_NOISE_VEL, PROCESS_NOISE_VEL, PROCESS_NOISE_WIND, PROCESS_NOISE_WIND]);
-            kf.R = math.multiply(math.identity(2), GPS_NOISE**2);
 
             generateNewWind();
             updateTrueWindWithNoise(0); // Initialize trueWind with noise (at time 0)
@@ -303,7 +283,7 @@
             }
 
             if (now - filter_time > 1000) {
-                runKalmanFilter(1.0);
+                kalmanFilter.run(1.0, boat, controls);
                 filter_time = now;
             }
             
@@ -534,17 +514,16 @@
             const trueSpeed = trueWind.length();
             const trueDir = radiansToDegrees(trueWind.angle());
             windSpeedDisplay.textContent = `${trueSpeed.toFixed(1)} m/s`; windDirDisplay.textContent = `${Math.round(trueDir)}°`;
-            // Estimated Wind from math.js matrix
-            const est_vx = kf.x.get([4]);
-            const est_vy = kf.x.get([5]);
-            const est_speed = Math.sqrt(est_vx**2 + est_vy**2);
-            const est_dir = radiansToDegrees(Math.atan2(est_vy, est_vx));
+            // Estimated Wind from kalman filter
+            const est_wind_vec = kalmanFilter.getWindVelocityEstimate();
+            const est_speed = est_wind_vec.length();
+            const est_dir = radiansToDegrees(Math.atan2(est_wind_vec.y, est_wind_vec.x));
             estWindSpeedDisplay.textContent = `${est_speed.toFixed(1)} m/s`; estWindDirDisplay.textContent = `${Math.round(est_dir)}°`;
         }
 
         // --- Start Simulation ---
         window.onload = initialize;
     </script>
-    <script src="kalmanFilter.js"></script>
+    
 </body>
 </html>
