@@ -41,9 +41,12 @@ class KalmanFilter {
 
         // --- Measurement ---
         // Simulate noisy GPS and compass reading
-        const noisy_pos_x = boat.pos.x + gaussianRandom() * Math.sqrt(this.R.get([0, 0]));
-        const noisy_pos_y = boat.pos.y + gaussianRandom() * Math.sqrt(this.R.get([1, 1]));
-        const noisy_angle = boat.angle + gaussianRandom() * Math.sqrt(this.R.get([2, 2]));
+        const GPS_NOISE = 0.5; // Standard deviation for GPS noise
+        const ANGLE_NOISE = 0.01; // Standard deviation for angle noise
+
+        const noisy_pos_x = boat.pos.x + gaussianRandom() * GPS_NOISE;
+        const noisy_pos_y = boat.pos.y + gaussianRandom() * GPS_NOISE;
+        const noisy_angle = boat.angle + gaussianRandom() * ANGLE_NOISE;
         const z = math.matrix([[noisy_pos_x], [noisy_pos_y], [noisy_angle]]);
 
         // --- Update Step (EKF Style for non-linear measurement) ---

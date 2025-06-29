@@ -4,10 +4,11 @@ const THROTTLE_I_GAIN = 0.1;
 const RUDDER_P_GAIN = 2.0;
 const RUDDER_I_GAIN = 0.0;
 
-const throttlePID = new PIDController(THROTTLE_P_GAIN, THROTTLE_I_GAIN, 0, 100);
+const throttlePID = new PIDController(THROTTLE_P_GAIN, THROTTLE_I_GAIN, 0, 1000);
 const rudderPID = new PIDController(RUDDER_P_GAIN, RUDDER_I_GAIN, 0, 1000);
 
 function steering_to_heading(targetAngle_deg) {
+    targetAngle_deg = targetAngle_deg;
 
     let boat_angle_deg = degrees(boat.angle);
 
@@ -26,12 +27,12 @@ function degrees(radians) {
 }
 
 function runWindVaneMode() {
-    const dx = anchorTarget.x - boat.x, dy = anchorTarget.y - boat.y, dist = Math.sqrt(dx*dx + dy*dy);
+    const dx = anchorTarget.x - boat.pos.x, dy = anchorTarget.y - boat.pos.y, dist = Math.sqrt(dx*dx + dy*dy);
     // rotate dx, dy by boat angle to get relative position
     const relDx = dx * Math.cos(boat.angle) + dy * Math.sin(boat.angle);
     const relDy = -dx * Math.sin(boat.angle) + dy * Math.cos(boat.angle);
 
-    const boat_vy = boat.gps_vx * Math.cos(boat.angle) + boat.gps_vy * Math.sin(boat.angle);
+    const boat_vy = boat.velocity.x * Math.cos(boat.angle) + boat.velocity.y * Math.sin(boat.angle);
 
     // Update debug display
     document.getElementById('debug-display').style.display = 'block';
@@ -45,7 +46,8 @@ function runWindVaneMode() {
     const LOIT_ANGLE_GAIN = 0.75;
 
     // Point into the wind
-    let into_wind_angle_rad = Math.atan2(-kf.x.get([5]), -kf.x.get([4]));
+    const wind_vec = kalmanFilter.getWindVelocityEstimate();
+    let into_wind_angle_rad = Math.atan2(-wind_vec.y, -wind_vec.x);
     const is_pointing_into_wind = Math.abs(into_wind_angle_rad - boat.angle) < Math.PI / 2;
     // modify the target angle to 'lean' towards the destination
     into_wind_angle_rad += clamp(relDy * LOIT_ANGLE_GAIN, -Math.PI / 10, Math.PI / 10);
