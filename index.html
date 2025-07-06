@@ -71,6 +71,7 @@
                 <h2 class="text-lg font-bold text-gray-800 mb-2">Vessel Info</h2>
                 <div class="grid grid-cols-2 gap-x-4 gap-y-1 text-gray-700">
                     <span>Speed:</span><span id="speedDisplay" class="font-mono text-right">0.0 knots</span>
+                    <span>Heading:</span><span id="headingDisplay" class="font-mono text-right">0.0 °</span>
                     <hr class="col-span-2 my-1 border-gray-300">
                     <span>True Wind:</span><span id="windSpeedDisplay" class="font-mono text-right">0.0 m/s</span>
                     <span>(Hidden) Dir:</span><span id="windDirDisplay" class="font-mono text-right">0 °</span>
@@ -130,6 +131,7 @@
         const BOAT_LENGTH = 40, BOAT_WIDTH = 15, MAX_THROTTLE_FORCE = 2000.0;
         const BOAT_MASS = 300; // Mass of the boat in kg
         const WATER_DRAG_COEFFICIENT = 0.08, WIND_FORCE_COEFFICIENT = 0.001;
+        const MOMENT_OF_INERTIA = 511; // Moment of inertia for the boat (kg*m^2)
 
         let screen_m_to_pix = {
             m: 0.1,
@@ -385,16 +387,18 @@
             if (crossProduct < 0) {
                 alpha = -alpha;
             }
-            boat.angularVelocity += Math.atan(alpha) * windForce.length() * 0.001 * dt; // Convert angle to radians/s
-
-            
+            const windTorque = Math.sin(alpha) * windForce.length() * 1.0;
 
             boat.velocity.add( force.multiplyScalar(dt / BOAT_MASS) )
             boat.pos.add( boat.velocity.clone().multiplyScalar(dt) );
 
+            
+            const motorTorque = Math.sin(degreesToRadians(controls.rudder)) * engineForce.length() * 1.0;
+            const angularDamping = -boat.angularVelocity * 500.0;
 
-            boat.angularVelocity += (controls.rudder * engineForce.length() * 0.002 * dt) * (Math.PI / 180); // Convert rudder angle to radians/s
-            boat.angularVelocity *= 0.93;
+            const totalTorque = motorTorque + windTorque + angularDamping;
+            const angularAcceleration = totalTorque / MOMENT_OF_INERTIA;
+            boat.angularVelocity += angularAcceleration * dt;
             boat.angle += boat.angularVelocity * dt;
 
 
@@ -509,6 +513,7 @@
         function updateUI() {
             throttleSlider.value=controls.throttle; rudderSlider.value=controls.rudder;
             speedDisplay.textContent = `${boat.speed.toFixed(1)} m/s`; // m/s to knots
+            headingDisplay.textContent = `${radiansToDegrees(boat.angle).toFixed(0)} °`;
             throttleValue.textContent=`${Math.round(controls.throttle)}%`; rudderValue.textContent=`${Math.round(controls.rudder)}°`;
             // True Wind
             const trueSpeed = trueWind.length();
