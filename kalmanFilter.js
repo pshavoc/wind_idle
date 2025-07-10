@@ -28,9 +28,9 @@ class KalmanFilter {
 
         // --- Prediction Step ---
         const F = this.getStateTransitionMatrix(dt);
-        const B = this.getControlMatrix(dt, boat.angle);
+        const B = this.getControlMatrix(dt, boat);
         const u = math.matrix([
-            [(controls.throttle / 100) * MAX_THROTTLE_FORCE / BOAT_MASS]
+            [controls.throttle]
         ]);
 
         // Predict state: x_pred = F * x + B * u
@@ -54,11 +54,6 @@ class KalmanFilter {
         const h_x = this.getMeasurementPrediction(x_pred);
         const y = math.subtract(z, h_x); // Innovation
 
-        // Normalize angle error to be within [-PI, PI]
-        let angle_error = y.get([2, 0]);
-        while (angle_error > Math.PI) angle_error -= 2 * Math.PI;
-        while (angle_error < -Math.PI) angle_error += 2 * Math.PI;
-        y.set([2, 0], angle_error);
 
         const S = math.add(math.multiply(H, P_pred, math.transpose(H)), this.R); // Innovation covariance
         const K = math.multiply(P_pred, math.transpose(H), math.inv(S)); // Kalman gain
@@ -74,25 +69,37 @@ class KalmanFilter {
     getStateTransitionMatrix(dt) {
         // Defines how state evolves without controls or noise.
         // x_new = x + vx*dt, v_new = v, w_new = w (random walk)
+
+        const vx = this.x.get([2, 0]);
+        const vy = this.x.get([3, 0]);
+        const wx = this.x.get([4, 0]);
+        const wy = this.x.get([5, 0]);
+
+        const apparent_wind_x = (wx - vx) * dt;
+        const apparent_wind_y = (wy - vy) * dt;
+        
+
         return math.matrix([
             [1, 0, dt, 0, 0, 0],
             [0, 1, 0, dt, 0, 0],
-            [0, 0, 1, 0, 0, 0],
-            [0, 0, 0, 1, 0, 0],
+            [0, 0, 1, 0, apparent_wind_x, 0],
+            [0, 0, 0, 1, 0, apparent_wind_y],
             [0, 0, 0, 0, 1, 0],
             [0, 0, 0, 0, 0, 1]
         ]);
     }
 
-    getControlMatrix(dt, angle) {
-        // Maps control input (engine acceleration) to the state.
-        const cosA = Math.cos(angle);
-        const sinA = Math.sin(angle);
+    getControlMatrix(dt, boat) {
+        // Maps control input to the state.
+
+        const cosA = Math.cos(boat.angle);
+        const sinA = Math.sin(boat.angle);
+
         return math.matrix([
-            [0.5 * cosA * dt * dt], // Effect on x
-            [0.5 * sinA * dt * dt], // Effect on y
-            [cosA * dt],           // Effect on vx
-            [sinA * dt],           // Effect on vy
+            [0],
+            [0],
+            [cosA * dt],
+            [sinA * dt],
             [0],
             [0]
         ]);
@@ -104,10 +111,8 @@ class KalmanFilter {
         const wx = x.get([4, 0]);
         const wy = x.get([5, 0]);
 
-        // Model: boat heading aligns with apparent wind direction. A simplification.
-        const apparent_wind_x = wx - vx;
-        const apparent_wind_y = wy - vy;
-        const predicted_angle = Math.atan2(apparent_wind_y, apparent_wind_x);
+        
+        const predicted_angle = 0.0;
 
         return math.matrix([
             [x.get([0, 0])],
@@ -117,33 +122,11 @@ class KalmanFilter {
     }
 
     getMeasurementJacobian(x) {
-        const vx = x.get([2, 0]);
-        const vy = x.get([3, 0]);
-        const wx = x.get([4, 0]);
-        const wy = x.get([5, 0]);
-
-        const apparent_wind_x = wx - vx;
-        const apparent_wind_y = wy - vy;
-        const len_sq = apparent_wind_x * apparent_wind_x + apparent_wind_y * apparent_wind_y;
-
-        if (len_sq < 0.001) { // Avoid division by zero
-            return math.matrix([
+        return math.matrix([
                 [1, 0, 0, 0, 0, 0],
                 [0, 1, 0, 0, 0, 0],
-                [0, 0, 0, 0, 0, 0] // No info from angle if no apparent wind
+                [0, 0, 0, 0, 0, 0],
             ]);
-        }
-
-        const d_angle_dvx = apparent_wind_y / len_sq;
-        const d_angle_dvy = -apparent_wind_x / len_sq;
-        const d_angle_dwx = -apparent_wind_y / len_sq;
-        const d_angle_dwy = apparent_wind_x / len_sq;
-
-        return math.matrix([
-            [1, 0, 0, 0, 0, 0],
-            [0, 1, 0, 0, 0, 0],
-            [0, 0, d_angle_dvx, d_angle_dvy, d_angle_dwx, d_angle_dwy]
-        ]);
     }
 
     getWindVelocityEstimate() {

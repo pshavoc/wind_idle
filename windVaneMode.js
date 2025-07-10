@@ -1,5 +1,5 @@
 (function() {
-const THROTTLE_P_GAIN = 30.0;
+const THROTTLE_P_GAIN = 100.0;
 const THROTTLE_I_GAIN = 0.0;
 const RUDDER_P_GAIN = 200.0;
 const RUDDER_I_GAIN = 10.0;
@@ -92,7 +92,7 @@ function runWindVaneMode() {
     // modify the desired forward speed based on the distance to the anchor
     let desiredSpeed = clamp(-relDx * 0.1, -2.0, 2.0); // Adjust the speed based on the relative position
 
-    control(desiredTurnRate, desiredSpeed);
+    
 
     // // Update debug display
     document.getElementById('debug-display').style.display = 'block';
@@ -104,8 +104,8 @@ function runWindVaneMode() {
 
     
 
-    // const LOIT_RADIUS = 50.0;
-    // const DEFAULT_SPEED = 3.0;
+    const LOIT_RADIUS = 50.0;
+    const DEFAULT_SPEED = 3.0;
     // const LOIT_SPEED_GAIN = 0.5;
     // const LOIT_ANGLE_GAIN = 0.001;
 
@@ -123,10 +123,25 @@ function runWindVaneMode() {
     // const into_wind_speed = Math.min(-relDx * LOIT_SPEED_GAIN, DEFAULT_SPEED) * (is_pointing_into_wind ? 1 : -1);
     // // const into_wind_speed = 1.0;
 
-    // const angle_lerp = logistic(LOIT_RADIUS - dist);
-    // //const angle_lerp = 1.0;
-    // let desired_yaw = angle_lerp * into_wind_angle_rad + (1.0 - angle_lerp) * bearing_to;
-    // let desired_speed = angle_lerp * into_wind_speed + (1.0 - angle_lerp) * DEFAULT_SPEED;
+    // move the anchor target 25 meters downwind
+    let modifed_target = new Vector2D(anchorTarget.x, anchorTarget.y);
+    modifed_target.x -= 25 * Math.sin(into_wind_angle_rad);
+    modifed_target.y -= 25 * Math.cos(into_wind_angle_rad);
+    modifed_target.subtract(boat.pos);
+    
+    // calc distance from boat to modified target
+    const modified_dist = modifed_target.length();
+
+    const wv_turn_rate = steering_to_heading(into_wind_angle_deg);
+    const bearing_to = steering_to_heading(radiansToDegrees(Math.atan2(dy, dx)));
+    const wv_speed = clamp(-relDx * 0.1, -2.0, 2.0); // Adjust the speed based on the relative position
+
+    const angle_lerp = logistic(LOIT_RADIUS - dist);
+    let desired_yaw = angle_lerp * wv_turn_rate + (1.0 - angle_lerp) * bearing_to;
+    let desired_speed = angle_lerp * wv_speed + (1.0 - angle_lerp) * DEFAULT_SPEED;
+
+
+    control(desired_yaw, desired_speed);
     
 
 

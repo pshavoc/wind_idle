@@ -158,7 +158,7 @@
         let baseWindSpeed = 0;
         let baseWindDirRadians = 0;
         let perlinNoiseTime = 0;
-        const PERLIN_WIND_FREQUENCY = 0.001; // Hz
+        const PERLIN_WIND_FREQUENCY = 0.01; // Hz
         const MAX_WIND_DIR_CHANGE_DEGREES = 60; // +/- 30 degrees
         let perlinGenerator = new PerlinNoise(); // Instantiate PerlinNoise class
 
@@ -387,7 +387,7 @@
             if (crossProduct < 0) {
                 alpha = -alpha;
             }
-            const windTorque = Math.sin(alpha) * windForce.length() * 1.0;
+            const windTorque = Math.sin(alpha) * windForce.length() * 2.0;
 
             boat.velocity.add( force.multiplyScalar(dt / BOAT_MASS) )
             boat.pos.add( boat.velocity.clone().multiplyScalar(dt) );
