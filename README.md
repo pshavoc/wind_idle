@@ -14,6 +14,16 @@ This is a 2D top-down motorboat simulation with realistic physics for a 16-foot 
         *   **Wind Vane Mode:** Autopilot to keep the bow of the boat pointing into the wind.
 *   **Advanced Wind Estimation:** In Wind Vane mode, a Kalman filter is used to estimate the wind direction for precise control.
 
+## How to Build
+
+cd windpark && wasm-pack build --target web
+
 ## How to Run
 
-The simulation is written entirely in HTML and JavaScript. Simply open the `index.html` file in a web browser to run it.
+The simulation is written entirely in HTML, JavaScript, and Rust Wasm. 
+
+Run:
+
+python3 -m http.server
+
+Then open a web browser to http://localhost:8000/

@@ -60,6 +60,15 @@
     </style>
 </head>
 <body class="bg-gray-900 text-white m-0 p-0">
+    <script type="module">
+        import init from './windpark/pkg/windpark.js';
+        init().then(() => {
+            console.log('Windpark module initialized');
+            // You can now use the functions from the windpark module
+        }).catch(err => {
+            console.error('Error initializing Windpark module:', err);
+        });
+    </script>
 
     <div class="relative w-screen h-screen">
         <!-- Canvas for the simulation -->

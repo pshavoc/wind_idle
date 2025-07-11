@@ -73,7 +73,7 @@ function runWindVaneMode() {
     const dx = anchorTarget.x - boat.pos.x, dy = anchorTarget.y - boat.pos.y, dist = Math.sqrt(dx*dx + dy*dy);
 
     // // const wind_vec = kalmanFilter.getWindVelocityEstimate();
-    const wind_vec = trueWind.clone(); // Use the true wind vector for now
+    const wind_vec = kalmanFilter.getWindVelocityEstimate();
     const wind_angle = wind_vec.angle();
     let into_wind_angle_rad = wind_angle + Math.PI;
     let into_wind_angle_deg = radiansToDegrees(into_wind_angle_rad);
