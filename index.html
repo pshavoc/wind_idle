@@ -61,13 +61,7 @@
 </head>
 <body class="bg-gray-900 text-white m-0 p-0">
     <script type="module">
-        import init from './windpark/pkg/windpark.js';
-        init().then(() => {
-            console.log('Windpark module initialized');
-            // You can now use the functions from the windpark module
-        }).catch(err => {
-            console.error('Error initializing Windpark module:', err);
-        });
+        
     </script>
 
     <div class="relative w-screen h-screen">
@@ -122,7 +116,22 @@
         <p>dist: <span id="dist-value"></span></p>
     </div>
 
-    <script>
+    <script type="module">
+        import init, { Windpark } from './windpark/pkg/windpark.js';
+
+        init().then(() => {
+            console.log('Windpark module initialized');
+            // You can now use the functions from the windpark module
+            sim = new Windpark();
+
+            initialize();
+
+        }).catch(err => {
+            console.error('Error initializing Windpark module:', err);
+        });
+
+        let sim = null;
+
         const canvas = document.getElementById('simulationCanvas');
         const ctx = canvas.getContext('2d');
 
@@ -134,6 +143,8 @@
         const estWindDirDisplay = document.getElementById('estWindDirDisplay'), autopilotBtn = document.getElementById('autopilotBtn');
         const autopilotStatus = document.getElementById('autopilotStatus');
         const newWindBtn = document.getElementById('newWindBtn');
+
+        
         
         // --- Simulation Constants ---
         const DT = 1/20; // 50Hz
@@ -171,7 +182,7 @@
         const MAX_WIND_DIR_CHANGE_DEGREES = 60; // +/- 30 degrees
         let perlinGenerator = new PerlinNoise(); // Instantiate PerlinNoise class
 
-        let kalmanFilter = new KalmanFilter();
+        // let kalmanFilter = new KalmanFilter();
         
         // --- Utility Functions ---
         function degreesToRadians(d) { return d * (Math.PI / 180); }
@@ -294,8 +305,8 @@
             }
 
             if (now - filter_time > 1000) {
-                kalmanFilter.run(1.0, boat, controls);
-                filter_time = now;
+                //kalmanFilter.run(1.0, boat, controls);
+                //filter_time = now;
             }
             
 
@@ -329,90 +340,99 @@
         function update_physics(dt) {
             updateTrueWindWithNoise(dt); // Update wind with Perlin noise
 
+            sim.set_wind(trueWind.x, trueWind.y);
+            sim.step(degreesToRadians(controls.rudder), controls.throttle, dt);
+            const boat_pos = sim.pos();
 
-            const boatDirection = new Vector2D(Math.cos(boat.angle), Math.sin(boat.angle));
+            boat.pos.x = boat_pos[0];
+            boat.pos.y = boat_pos[1];
+            boat.angle = sim.theta();
+            boat.speed = sim.speed();
+
+
+            // const boatDirection = new Vector2D(Math.cos(boat.angle), Math.sin(boat.angle));
             
-            let force = new Vector2D(0, 0);
+            // let force = new Vector2D(0, 0);
 
-            const engineForce = new Vector2D(Math.cos(boat.angle), Math.sin(boat.angle)).multiplyScalar( (controls.throttle / 100) * MAX_THROTTLE_FORCE);
+            // const engineForce = new Vector2D(Math.cos(boat.angle), Math.sin(boat.angle)).multiplyScalar( (controls.throttle / 100) * MAX_THROTTLE_FORCE);
 
-            force.add(engineForce);
+            // force.add(engineForce);
 
-            // --- Keel Physics (Symetric Airfoil Model) ---
-            if (boat.velocity.length() > 0.1) { // Only apply keel forces if moving to prevent division by zero
-                // Angle of attack (alpha) is the angle between the boat's heading and its velocity vector.
+            // // --- Keel Physics (Symetric Airfoil Model) ---
+            // if (boat.velocity.length() > 0.1) { // Only apply keel forces if moving to prevent division by zero
+            //     // Angle of attack (alpha) is the angle between the boat's heading and its velocity vector.
                 
-                const velocityNormal = boat.velocity.clone().normalize();
+            //     const velocityNormal = boat.velocity.clone().normalize();
                 
-                let alpha = boatDirection.angleTo(boat.velocity);
+            //     let alpha = boatDirection.angleTo(boat.velocity);
 
-                // Use the 2D cross product to determine the sign of the angle (leeway direction).
-                const crossProduct = boatDirection.x * velocityNormal.y - boatDirection.y * velocityNormal.x;
-                if (crossProduct < 0) {
-                    alpha = -alpha;
-                }
+            //     // Use the 2D cross product to determine the sign of the angle (leeway direction).
+            //     const crossProduct = boatDirection.x * velocityNormal.y - boatDirection.y * velocityNormal.x;
+            //     if (crossProduct < 0) {
+            //         alpha = -alpha;
+            //     }
 
-                // Simplified airfoil physics for the keel
-                const LIFT_COEFFICIENT = 1.0; // Adjusted for noticeable effect
-                const DRAG_COEFFICIENT = 0.7;  // Adjusted for noticeable effect
-                const KEEL_AREA = 0.08;       // m^2, effective area of the keel
-                const WATER_DENSITY = 1000;  // kg/m^3
+            //     // Simplified airfoil physics for the keel
+            //     const LIFT_COEFFICIENT = 1.0; // Adjusted for noticeable effect
+            //     const DRAG_COEFFICIENT = 0.7;  // Adjusted for noticeable effect
+            //     const KEEL_AREA = 0.08;       // m^2, effective area of the keel
+            //     const WATER_DENSITY = 1000;  // kg/m^3
 
-                const speedSq = boat.velocity.lengthSq();
-                const dynamicPressure = 0.5 * WATER_DENSITY * speedSq * KEEL_AREA;
+            //     const speedSq = boat.velocity.lengthSq();
+            //     const dynamicPressure = 0.5 * WATER_DENSITY * speedSq * KEEL_AREA;
 
-                // Lift and Drag coefficients as a function of angle of attack (alpha)
-                const cl = LIFT_COEFFICIENT * Math.sin(2 * alpha);
-                const cd = DRAG_COEFFICIENT * (1 - Math.cos(2 * alpha)) + 1.0;
+            //     // Lift and Drag coefficients as a function of angle of attack (alpha)
+            //     const cl = LIFT_COEFFICIENT * Math.sin(2 * alpha);
+            //     const cd = DRAG_COEFFICIENT * (1 - Math.cos(2 * alpha)) + 1.0;
 
-                const liftForceMag = dynamicPressure * cl;
-                const dragForceMag = dynamicPressure * cd;
+            //     const liftForceMag = dynamicPressure * cl;
+            //     const dragForceMag = dynamicPressure * cd;
 
-                // Lift force is perpendicular to the direction of water flow (velocity).
-                const liftAngle = boat.velocity.angle() + -Math.PI / 2;
-                const liftForce = new Vector2D(Math.cos(liftAngle), Math.sin(liftAngle)).multiplyScalar(liftForceMag);
+            //     // Lift force is perpendicular to the direction of water flow (velocity).
+            //     const liftAngle = boat.velocity.angle() + -Math.PI / 2;
+            //     const liftForce = new Vector2D(Math.cos(liftAngle), Math.sin(liftAngle)).multiplyScalar(liftForceMag);
 
-                // Drag force is opposite to the direction of velocity.
-                const dragForce = velocityNormal.multiplyScalar(-dragForceMag);
+            //     // Drag force is opposite to the direction of velocity.
+            //     const dragForce = velocityNormal.multiplyScalar(-dragForceMag);
 
-                force.add(liftForce);
-                force.add(dragForce);
-            }
+            //     force.add(liftForce);
+            //     force.add(dragForce);
+            // }
 
-            let apparentWind = trueWind.clone().add(boat.velocity.clone().multiplyScalar(-1)); // Apparent wind is the true wind minus the boat's velocity
-            const AIR_DENSITY = 1.225; // kg/m^3, density of air at sea level
-            const HULL_AREA = 5.0; // m^2, effective area of the hull
-            const WIND_DRAG_COEFFICIENT = 1.0; // Adjusted for noticeable effect
-            const dynamicPressure = 0.5 * AIR_DENSITY * apparentWind.lengthSq() * HULL_AREA;
-            const windDragForceMag = dynamicPressure * WIND_DRAG_COEFFICIENT;
-            let windForce = apparentWind.clone().normalize().multiplyScalar(windDragForceMag);
-            force.add(windForce);
+            // let apparentWind = trueWind.clone().add(boat.velocity.clone().multiplyScalar(-1)); // Apparent wind is the true wind minus the boat's velocity
+            // const AIR_DENSITY = 1.225; // kg/m^3, density of air at sea level
+            // const HULL_AREA = 5.0; // m^2, effective area of the hull
+            // const WIND_DRAG_COEFFICIENT = 1.0; // Adjusted for noticeable effect
+            // const dynamicPressure = 0.5 * AIR_DENSITY * apparentWind.lengthSq() * HULL_AREA;
+            // const windDragForceMag = dynamicPressure * WIND_DRAG_COEFFICIENT;
+            // let windForce = apparentWind.clone().normalize().multiplyScalar(windDragForceMag);
+            // force.add(windForce);
 
-            // wind angle of attack
-            let alpha = boatDirection.angleTo(trueWind);
-            const trueWindNormal = trueWind.clone().normalize();
-            // Use the 2D cross product to determine the sign of the angle (leeway direction).
-            const crossProduct = boatDirection.x * trueWindNormal.y - boatDirection.y * trueWindNormal.x;
-            if (crossProduct < 0) {
-                alpha = -alpha;
-            }
-            const windTorque = Math.sin(alpha) * windForce.length() * 2.0;
+            // // wind angle of attack
+            // let alpha = boatDirection.angleTo(trueWind);
+            // const trueWindNormal = trueWind.clone().normalize();
+            // // Use the 2D cross product to determine the sign of the angle (leeway direction).
+            // const crossProduct = boatDirection.x * trueWindNormal.y - boatDirection.y * trueWindNormal.x;
+            // if (crossProduct < 0) {
+            //     alpha = -alpha;
+            // }
+            // const windTorque = Math.sin(alpha) * windForce.length() * 2.0;
 
-            boat.velocity.add( force.multiplyScalar(dt / BOAT_MASS) )
-            boat.pos.add( boat.velocity.clone().multiplyScalar(dt) );
+            // boat.velocity.add( force.multiplyScalar(dt / BOAT_MASS) )
+            // boat.pos.add( boat.velocity.clone().multiplyScalar(dt) );
 
             
-            const motorTorque = Math.sin(degreesToRadians(controls.rudder)) * engineForce.length() * 1.0;
-            const angularDamping = -boat.angularVelocity * 500.0;
+            // const motorTorque = Math.sin(degreesToRadians(controls.rudder)) * engineForce.length() * 1.0;
+            // const angularDamping = -boat.angularVelocity * 500.0;
 
-            const totalTorque = motorTorque + windTorque + angularDamping;
-            const angularAcceleration = totalTorque / MOMENT_OF_INERTIA;
-            boat.angularVelocity += angularAcceleration * dt;
-            boat.angle += boat.angularVelocity * dt;
+            // const totalTorque = motorTorque + windTorque + angularDamping;
+            // const angularAcceleration = totalTorque / MOMENT_OF_INERTIA;
+            // boat.angularVelocity += angularAcceleration * dt;
+            // boat.angle += boat.angularVelocity * dt;
 
 
 
-            boat.speed = boat.velocity.length();
+            // boat.speed = boat.velocity.length();
             
             // --- Bubble generation ---
             let genbubble = Math.random() < controls.throttle * 0.05;
@@ -420,7 +440,7 @@
                 const spread = (Math.random() - 0.5) * 2.0; // Spread bubbles behind the boat
                 const angleOffset = (Math.random() - 0.5) * 0.1; // Slight random angle for bubbles
                 const angle = boat.angle + degreesToRadians(-controls.rudder) + Math.PI + angleOffset;
-                const forceMag = engineForce.length() * 0.002; // Bubbles move slower than the boat
+                const forceMag = controls.throttle * 0.002; // Bubbles move slower than the boat
 
                 // the bubbles should originate from the back of the boat
                 // Adjust origin to be behind the boat
@@ -529,14 +549,13 @@
             const trueDir = radiansToDegrees(trueWind.angle());
             windSpeedDisplay.textContent = `${trueSpeed.toFixed(1)} m/s`; windDirDisplay.textContent = `${Math.round(trueDir)}°`;
             // Estimated Wind from kalman filter
-            const est_wind_vec = kalmanFilter.getWindVelocityEstimate();
-            const est_speed = est_wind_vec.length();
-            const est_dir = radiansToDegrees(Math.atan2(est_wind_vec.y, est_wind_vec.x));
-            estWindSpeedDisplay.textContent = `${est_speed.toFixed(1)} m/s`; estWindDirDisplay.textContent = `${Math.round(est_dir)}°`;
+            // const est_wind_vec = kalmanFilter.getWindVelocityEstimate();
+            // const est_speed = est_wind_vec.length();
+            // const est_dir = radiansToDegrees(Math.atan2(est_wind_vec.y, est_wind_vec.x));
+            // estWindSpeedDisplay.textContent = `${est_speed.toFixed(1)} m/s`; estWindDirDisplay.textContent = `${Math.round(est_dir)}°`;
         }
 
-        // --- Start Simulation ---
-        window.onload = initialize;
+        
     </script>
     
 </body>
