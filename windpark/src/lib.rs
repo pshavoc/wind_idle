@@ -10,11 +10,11 @@ const NUM_STATES: usize = 8;
 const WATER_DENSITY: f32 = 1000.0; // kg/m^3, typical value for water density
 const AIR_DENSITY: f32 = 1.225; // kg/m^3, typical value for air density at sea level
 const KEEL_AREA: f32 = 1.0; // m^2, area of the keel
-const HULL_AREA: f32 = 0.5; // m^2, area of the hull exposed to wind
+const HULL_AREA: f32 = 5.0; // m^2, area of the hull exposed to wind
 
 const LIFT_COEFFICIENT: f32 = 0.5;
 const DRAG_COEFFICENT: f32 = 0.1;
-const THRUST_TORQUE_COEFFICIENT: f32 = 10.0;
+const THRUST_TORQUE_COEFFICIENT: f32 = 5.0;
 const THRUST_FORCE: f32 = 10.0;
 
 const BOAT_MASS: f32 = 300.0; // mass of boat in kg
@@ -110,7 +110,6 @@ fn state_transition<D: DualNum<f32> + Copy + nalgebra::RealField>(input: SVector
 
         let mut angle_of_attack = boat_direction.angle(&velocity);
         if boat_direction.perp(&velocity.normalize()) < D::zero() {
-            // if the boat is moving backwards, reverse the angle of attack
             angle_of_attack = -angle_of_attack;
         }
 
@@ -139,8 +138,12 @@ fn state_transition<D: DualNum<f32> + Copy + nalgebra::RealField>(input: SVector
     // calculate apparent wind
     let apparent_wind = wind_velocity - velocity;
     let dynamic_pressure = apparent_wind.norm_squared() * 0.5 * AIR_DENSITY * HULL_AREA;
-    let angle_of_attack = boat_direction.angle(&apparent_wind);
-    // force += wind_velocity.normalize() * dynamic_pressure;
+    let mut angle_of_attack = boat_direction.angle(&apparent_wind);
+    if boat_direction.perp(&apparent_wind.normalize()) < D::zero() {
+        angle_of_attack = -angle_of_attack;
+    }
+    force += wind_velocity.normalize() * dynamic_pressure;
+    torque += angle_of_attack.sin() * wind_velocity.norm();
 
     velocity += force * (dt.clone() / BOAT_MASS);
     pos += velocity * dt.clone();
