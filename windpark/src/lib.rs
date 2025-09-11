@@ -80,6 +80,11 @@ impl Windpark {
         Vector2::new(self.x[4], self.x[5]).norm()
     }
 
+    #[wasm_bindgen]
+    pub fn velocity(&self) -> Vec<Float> {
+        vec![self.x[4], self.x[5]]
+    }
+
     pub fn get_state(&self) -> Vec<Float> {
         self.x.to_vec()
     }

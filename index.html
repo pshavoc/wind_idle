@@ -94,8 +94,8 @@
                     <!-- Throttle Control -->
                     <div class="flex items-center gap-3">
                         <label for="throttle" class="font-medium text-gray-800">Throttle:</label>
-                        <input type="range" id="throttle" min="0" max="100" value="0" class="w-40 h-2 bg-gray-300 rounded-lg appearance-none cursor-pointer">
-                         <span id="throttleValue" class="font-mono text-gray-800 w-12 text-right">0%</span>
+                        <input type="range" id="throttle" min="-100" max="100" value="0" class="w-40 h-2 bg-gray-300 rounded-lg appearance-none cursor-pointer" title="Negative = reverse">
+                         <span id="throttleValue" class="font-mono text-gray-800 w-16 text-right">0%</span>
                     </div>
                     <!-- Rudder Control -->
                     <div class="flex items-center gap-3">
@@ -122,7 +122,7 @@
             angularVelocity: 0, // Angular velocity in radians/s
         };
         let trueWind = new Vector2D(0, 0); // Wind vector in m/s
-        let controls = { throttle: 0, rudder: 0 };
+    let controls = { throttle: 0, rudder: 0 };
         let keysPressed = {};
         let autopilotMode = 'OFF';
         let anchorTarget = null;
@@ -131,7 +131,7 @@
 
         // --- Simulation Constants ---
         const DT = 1/20; // 50Hz
-        const BOAT_LENGTH = 40, BOAT_WIDTH = 15, MAX_THROTTLE_FORCE = 2000.0;
+    const BOAT_LENGTH = 40, BOAT_WIDTH = 15, MAX_THROTTLE_FORCE = 2000.0;
         const BOAT_MASS = 300; // Mass of the boat in kg
         const WATER_DRAG_COEFFICIENT = 0.08, WIND_FORCE_COEFFICIENT = 0.001;
         const MOMENT_OF_INERTIA = 511; // Moment of inertia for the boat (kg*m^2)
@@ -294,9 +294,12 @@
         }
 
         // --- Control Logic ---
+        // Keyboard adjustment rates (added for reverse throttle support)
+        const THROTTLE_KEY_RATE = 2; // percent per frame when key held
+        const RUDDER_KEY_RATE = 1;    // degrees per frame when key held
         function handleKeyboardControls() {
             if (keysPressed['ArrowUp']) controls.throttle = Math.min(100, controls.throttle + THROTTLE_KEY_RATE);
-            if (keysPressed['ArrowDown']) controls.throttle = Math.max(0, controls.throttle - THROTTLE_KEY_RATE);
+            if (keysPressed['ArrowDown']) controls.throttle = Math.max(-100, controls.throttle - THROTTLE_KEY_RATE);
             if (keysPressed['ArrowLeft']) controls.rudder = Math.max(-30, controls.rudder - RUDDER_KEY_RATE);
             if (keysPressed['ArrowRight']) controls.rudder = Math.min(30, controls.rudder + RUDDER_KEY_RATE);
         }
@@ -365,6 +368,9 @@
             boat.angle = sim.theta();
             boat.speed = sim.speed();
             boat.angularVelocity = sim.angular_velocity();
+            let velocity = sim.velocity();
+            boat.velocity.x = velocity[0];
+            boat.velocity.y = velocity[1];
 
 
             // const boatDirection = new Vector2D(Math.cos(boat.angle), Math.sin(boat.angle));
@@ -452,17 +458,20 @@
             // boat.speed = boat.velocity.length();
             
             // --- Bubble generation ---
-            let genbubble = Math.random() < controls.throttle * 0.05;
+            // Bubble generation now uses absolute throttle so reverse still shows prop wash
+            let genbubble = Math.random() < Math.abs(controls.throttle) * 0.05;
             if (genbubble) {
                 const spread = (Math.random() - 0.5) * 2.0; // Spread bubbles behind the boat
                 const angleOffset = (Math.random() - 0.5) * 0.1; // Slight random angle for bubbles
-                const angle = boat.angle + degreesToRadians(-controls.rudder) + Math.PI + angleOffset;
-                const forceMag = controls.throttle * 0.002; // Bubbles move slower than the boat
+                const reversing = controls.throttle < 0;
+                // If reversing, thrust vector is forward (no +PI flip)
+                const angle = boat.angle + degreesToRadians(-controls.rudder) + (reversing ? 0 : Math.PI) + angleOffset;
+                const forceMag = Math.abs(controls.throttle) * 0.002; // Bubbles move slower than the boat
 
-                // the bubbles should originate from the back of the boat
-                // Adjust origin to be behind the boat
-                let origin_x = boat.pos.x - Math.cos(boat.angle) * 3.0;
-                let origin_y = boat.pos.y - Math.sin(boat.angle) * 3.0;
+                // place bubbles at prop location (stern when forward, bow when reversing to mimic wash direction)
+                const offsetDir = reversing ? 1 : -1;
+                let origin_x = boat.pos.x + Math.cos(boat.angle) * 3.0 * offsetDir;
+                let origin_y = boat.pos.y + Math.sin(boat.angle) * 3.0 * offsetDir;
 
                 bubbles.push({
                     x: origin_x,

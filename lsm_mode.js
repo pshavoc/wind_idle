@@ -15,8 +15,8 @@ let counter = 0;
 function control(desiredTurnRate, desiredSpeed) {
 
     // get the boat's forward speed
-    // const forwardSpeed = Math.cos(boat.angle) * boat.velocity.x + Math.sin(boat.angle) * boat.velocity.y;
-    const forwardSpeed = boat.speed;
+    const forwardSpeed = Math.cos(boat.angle) * boat.velocity.x + Math.sin(boat.angle) * boat.velocity.y;
+    // const forwardSpeed = boat.speed;
 
     if (counter++ % 100 === 0) {
         console.log(`Desired Turn Rate: ${desiredTurnRate.toFixed(2)} rad/s. Turn Rate: ${boat.angularVelocity.toFixed(2)} rad/s`);
@@ -27,11 +27,12 @@ function control(desiredTurnRate, desiredSpeed) {
 
     // Update PID controllers
     const rudderOutput = clamp(rudderPID.update(desiredTurnRate, boat.angularVelocity, DT), -100, 100);
-    const throttleOutput = clamp(throttlePID.update(desiredSpeed, forwardSpeed, DT), 0.0, 100.0);
+    const throttleOutput = clamp(throttlePID.update(desiredSpeed, forwardSpeed, DT), -100.0, 100.0);
     
+    const throttleSign = (throttleOutput > 0) ? 1 : -1;
 
-    controls.throttle = clamp( Math.sqrt( rudderOutput * rudderOutput + throttleOutput * throttleOutput), 0, 100);
-    controls.rudder = clamp (Math.atan2(rudderOutput, throttleOutput) * (180 / Math.PI), -30, 30);
+    controls.throttle = clamp( throttleSign * Math.sqrt( rudderOutput * rudderOutput + throttleOutput * throttleOutput), -100, 100);
+    controls.rudder = clamp ( throttleSign * Math.atan2(rudderOutput, throttleOutput) * (180 / Math.PI), -30, 30);
 }
 
 function lsmModeControl() {
@@ -43,7 +44,8 @@ function lsmModeControl() {
 
     if (gp === null) return;
 
-    control(gp.axes[0], 1.0);
+    
+    control(gp.axes[0], 0.2);
 
     // console.log(`gp.axes[0]: ${gp.axes[0]}`);
     // console.log(`gp.axes[1]: ${gp.axes[1]}`);
