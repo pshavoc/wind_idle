@@ -1,8 +1,9 @@
+mod lsm_mode;
 use std::f32;
 
-use wasm_bindgen::prelude::*;
-use num_dual::*;
 use nalgebra::{Rotation2, SVector, Vector2};
+use num_dual::*;
+use wasm_bindgen::prelude::*;
 
 // x, y, theta, a, vx, vy, wx, wy
 const NUM_STATES: usize = 8;
@@ -25,6 +26,7 @@ type Float = f32;
 #[wasm_bindgen]
 pub struct Windpark {
     x: [Float; NUM_STATES],
+    covariance: nalgebra::SMatrix<Float, NUM_STATES, NUM_STATES>,
 }
 
 #[wasm_bindgen]
@@ -33,24 +35,23 @@ impl Windpark {
     pub fn new() -> Windpark {
         Windpark {
             x: [0.0; NUM_STATES],
+            covariance: nalgebra::SMatrix::<Float, NUM_STATES, NUM_STATES>::identity(),
         }
     }
 
     #[wasm_bindgen]
     pub fn step(&mut self, rudder: Float, throttle: Float, dt: Float) {
-
-        let input = SVector::<Float, 11>::from_fn(|i, _| {
-            match i {
-                0 => dt,
-                1 => rudder,
-                2 => throttle,
-                _ => self.x[i - 3],
-            }
+        let input = SVector::<Float, 11>::from_fn(|i, _| match i {
+            0 => dt,
+            1 => rudder,
+            2 => throttle,
+            _ => self.x[i - 3],
         });
 
         let (f, jac) = jacobian(state_transition, input);
-        self.x = f.into();
-        
+        let x_hat = f.into();
+
+        self.x = x_hat;
     }
 
     #[wasm_bindgen]
@@ -70,6 +71,11 @@ impl Windpark {
     }
 
     #[wasm_bindgen]
+    pub fn angular_velocity(&self) -> Float {
+        self.x[3]
+    }
+
+    #[wasm_bindgen]
     pub fn speed(&self) -> Float {
         Vector2::new(self.x[4], self.x[5]).norm()
     }
@@ -79,7 +85,17 @@ impl Windpark {
     }
 }
 
-fn state_transition<D: DualNum<f32> + Copy + nalgebra::RealField>(input: SVector<D, 11>) -> SVector<D, NUM_STATES> {
+fn predict_measurement<D: DualNum<f32> + Copy + nalgebra::RealField>(
+    x: SVector<D, NUM_STATES>,
+) -> SVector<D, 3> {
+    SVector::from([
+        x[0], x[1], x[2], // theta
+    ])
+}
+
+fn state_transition<D: DualNum<f32> + Copy + nalgebra::RealField>(
+    input: SVector<D, 11>,
+) -> SVector<D, NUM_STATES> {
     let dt = &input[0];
     let rudder = &input[1];
     let throttle = &input[2];
@@ -89,7 +105,7 @@ fn state_transition<D: DualNum<f32> + Copy + nalgebra::RealField>(input: SVector
     let mut angular_velocity = input[6].clone();
     let mut velocity = Vector2::new(input[7].clone(), input[8].clone());
     let wind_velocity = Vector2::new(input[9].clone(), input[10].clone());
-    
+
     let boat_direction = Vector2::new(theta.cos(), theta.sin());
 
     let mut torque = D::zero();
@@ -124,9 +140,7 @@ fn state_transition<D: DualNum<f32> + Copy + nalgebra::RealField>(input: SVector
         force += (rotate90 * boat_direction) * lift;
 
         force -= velocity.normalize() * drag;
-
     }
-
 
     let angular_damping = (angular_velocity * angular_velocity) * 200.0;
     if angular_velocity > D::zero() {
@@ -143,15 +157,13 @@ fn state_transition<D: DualNum<f32> + Copy + nalgebra::RealField>(input: SVector
         angle_of_attack = -angle_of_attack;
     }
     force += wind_velocity.normalize() * dynamic_pressure;
-    torque += angle_of_attack.sin() * wind_velocity.norm();
+    torque += angle_of_attack.sin() * dynamic_pressure;
 
     velocity += force * (dt.clone() / BOAT_MASS);
     pos += velocity * dt.clone();
 
     angular_velocity += torque * (dt.clone() / MOMENT_OF_INERTIA);
     theta += angular_velocity * dt.clone();
-
-    
 
     SVector::from([
         pos[0],
@@ -163,9 +175,7 @@ fn state_transition<D: DualNum<f32> + Copy + nalgebra::RealField>(input: SVector
         wind_velocity[0],
         wind_velocity[1],
     ])
-
 }
-
 
 #[cfg(test)]
 mod tests {
@@ -178,6 +188,4 @@ mod tests {
         let state = windpark.get_state();
         assert_eq!(state.len(), NUM_STATES);
     }
-
-    
 }
