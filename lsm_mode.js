@@ -9,6 +9,8 @@ const throttlePID = new PIDController(THROTTLE_P_GAIN, THROTTLE_I_GAIN, 0, 200);
 const rudderPID = new PIDController(RUDDER_P_GAIN, RUDDER_I_GAIN, 0, 200);
 
 let counter = 0;
+let gear = 0;
+let previousButtonStates = {};
 
 // let gp = null;
 
@@ -44,8 +46,26 @@ function lsmModeControl() {
 
     if (gp === null) return;
 
+    if (!previousButtonStates[gp.index]) {
+        previousButtonStates[gp.index] = Array(gp.buttons.length).fill(false);
+    }
+
+    if (gp.buttons[12].pressed && !previousButtonStates[gp.index][12]) {
+        gear += 1;
+    }
+    if (gp.buttons[13].pressed && !previousButtonStates[gp.index][13]) {
+        gear -= 1;
+    }
+
+    previousButtonStates[gp.index] = gp.buttons.map(b => b.pressed);
+
     
-    control(gp.axes[0], 0.2);
+    gear = clamp(gear, -5, 10);
+
+    let desiredSpeed = gear * gp.buttons[6].value;
+
+    
+    control(gp.axes[0], desiredSpeed);
 
     // console.log(`gp.axes[0]: ${gp.axes[0]}`);
     // console.log(`gp.axes[1]: ${gp.axes[1]}`);
