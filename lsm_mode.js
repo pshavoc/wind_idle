@@ -1,12 +1,12 @@
 (function() {
 
-const THROTTLE_P_GAIN = 100.0;
+const THROTTLE_P_GAIN = 50.0;
 const THROTTLE_I_GAIN = 0.0;
-const RUDDER_P_GAIN = 200.0;
-const RUDDER_I_GAIN = 10.0;
+const RUDDER_P_GAIN = 50.0;
+const RUDDER_I_GAIN = 6.0;
 
-const throttlePID = new PIDController(THROTTLE_P_GAIN, THROTTLE_I_GAIN, 0, 200);
-const rudderPID = new PIDController(RUDDER_P_GAIN, RUDDER_I_GAIN, 0, 200);
+const throttlePID = new PIDController(THROTTLE_P_GAIN, THROTTLE_I_GAIN, 0, 100);
+const rudderPID = new PIDController(RUDDER_P_GAIN, RUDDER_I_GAIN, 0, 1);
 
 let counter = 0;
 let gear = 0;
@@ -28,13 +28,23 @@ function control(desiredTurnRate, desiredSpeed) {
     
 
     // Update PID controllers
-    const rudderOutput = clamp(rudderPID.update(desiredTurnRate, boat.angularVelocity, DT), -100, 100);
-    const throttleOutput = clamp(throttlePID.update(desiredSpeed, forwardSpeed, DT), -100.0, 100.0);
+    let rudderOutput = clamp(rudderPID.update(desiredTurnRate, boat.angularVelocity, DT), -100, 100);
+    let throttleOutput = clamp(throttlePID.update(desiredSpeed, forwardSpeed, DT), -100.0, 100.0);
     
     const throttleSign = (throttleOutput > 0) ? 1 : -1;
 
-    controls.throttle = clamp( throttleSign * Math.sqrt( rudderOutput * rudderOutput + throttleOutput * throttleOutput), -100, 100);
-    controls.rudder = clamp ( throttleSign * Math.atan2(rudderOutput, throttleOutput) * (180 / Math.PI), -30, 30);
+    throttleOutput = clamp( throttleSign * Math.sqrt( rudderOutput * rudderOutput + throttleOutput * throttleOutput), -100, 100);
+
+    // add slew rate limiting
+    let diff = throttleOutput - controls.throttle;
+    diff = clamp(diff, -5 * DT, 5 * DT);
+    controls.throttle = clamp(controls.throttle + diff, -20, 100);
+
+    rudderOutput = clamp ( Math.sign(controls.throttle) * Math.atan2(rudderOutput, controls.throttle) * (180 / Math.PI), -30, 30);
+    diff = rudderOutput - controls.rudder;
+    diff = clamp(diff, -40 * DT, 40 * DT);
+    controls.rudder = controls.rudder + diff;
+
 }
 
 function lsmModeControl() {
@@ -65,7 +75,7 @@ function lsmModeControl() {
     let desiredSpeed = gear * gp.buttons[6].value;
 
     
-    control(gp.axes[0], desiredSpeed);
+    control(gp.axes[0] * 0.5, desiredSpeed);
 
     // console.log(`gp.axes[0]: ${gp.axes[0]}`);
     // console.log(`gp.axes[1]: ${gp.axes[1]}`);
