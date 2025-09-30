@@ -6,29 +6,34 @@ const RUDDER_I_GAIN = 10.0;
 
 const throttlePID = new PIDController(THROTTLE_P_GAIN, THROTTLE_I_GAIN, 0, 200);
 const rudderPID = new PIDController(RUDDER_P_GAIN, RUDDER_I_GAIN, 0, 200);
+const CYCLE_TIME_HZ = 0.1;
 
+let clock = 0;
 let counter = 0;
 
-function control(desiredTurnRate, desiredSpeed) {
-
-
-    // get the boat's forward speed
-    const forwardSpeed = Math.cos(boat.angle) * boat.velocity.x + Math.sin(boat.angle) * boat.velocity.y;
+function control2(desiredTurnRate, desiredSpeed) {
 
     if (counter++ % 100 === 0) {
         console.log(`Desired Turn Rate: ${desiredTurnRate.toFixed(2)} rad/s. Turn Rate: ${boat.angularVelocity.toFixed(2)} rad/s`);
         console.log(`Desired Speed: ${desiredSpeed.toFixed(2)} m/s. Forward Speed: ${forwardSpeed.toFixed(2)} m/s`);    
     }
+    // // get the boat's forward speed
+    // const forwardSpeed = Math.cos(boat.angle) * boat.velocity.x + Math.sin(boat.angle) * boat.velocity.y;
 
+    // // Update PID controllers
+    // const rudderOutput = clamp(rudderPID.update(desiredTurnRate, boat.angularVelocity, DT), -1.0, 1.0);
+    // const throttleOutput = clamp(throttlePID.update(desiredSpeed, forwardSpeed, DT), -1.0, 1.0);
     
+    // clock += DT;
+    // let c = Math.cos(clock * CYCLE_TIME_HZ * 2 * Math.PI);
 
-    // Update PID controllers
-    const rudderOutput = clamp(rudderPID.update(desiredTurnRate, boat.angularVelocity, DT), -100, 100);
-    const throttleOutput = clamp(throttlePID.update(desiredSpeed, forwardSpeed, DT), 0.0, 100.0);
-    
+    // let q = Math.sqrt(throttleOutput * throttleOutput + rudderOutput * rudderOutput);
 
-    controls.throttle = clamp( Math.sqrt( rudderOutput * rudderOutput + throttleOutput * throttleOutput), 0, 100);
-    controls.rudder = clamp (Math.atan2(rudderOutput, throttleOutput) * (180 / Math.PI), -30, 30);
+    // controls.throttle = clamp(100.0 * (q * c + t), -100, 100);
+    // controls.rudder = clamp(30.0 * rudderOutput, -30, 30);
+
+    controls.throttle = clamp(100.0 * desiredSpeed / 5.0, -100, 100);
+    controls.rudder = clamp(30.0 * desiredTurnRate / 0.349, -30, 30);
 }
 
 

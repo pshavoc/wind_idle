@@ -1,3 +1,5 @@
+mod physical_sim;
+mod rampage;
 mod lsm_mode;
 use std::f32;
 
@@ -48,7 +50,8 @@ impl Windpark {
             _ => self.x[i - 3],
         });
 
-        let (f, jac) = jacobian(state_transition, input);
+        // let (f, jac) = jacobian(state_transition, input);
+        let (f, jac) = jacobian(physical_sim::state_transition, input);
         let x_hat = f.into();
 
         self.x = x_hat;
@@ -77,7 +80,8 @@ impl Windpark {
 
     #[wasm_bindgen]
     pub fn speed(&self) -> Float {
-        Vector2::new(self.x[4], self.x[5]).norm()
+        let speed = Vector2::new(self.x[4], self.x[5]).norm();
+        if speed.is_nan() { 0.0 } else { speed }
     }
 
     #[wasm_bindgen]
