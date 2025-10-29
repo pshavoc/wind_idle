@@ -42,10 +42,10 @@ function control(desiredTurnRate, desiredSpeed) {
     // controls.throttle = clamp(throttlePID.update(desiredSpeed, forwardSpeed, DT), -100.0, 100.0);
     
 
-    // controls.rudder = clamp(30.0 * rudderOutput * Math.sign(c), -30, 30);
+    // controls.rudder = clamp(15.0 * rudderOutput * Math.sign(c), -15, 15);
 
     controls.throttle = clamp(100.0 * desiredSpeed / 5.0, -100, 100);
-    controls.rudder = clamp(30.0 * desiredTurnRate / 0.349, -30, 30);
+    controls.rudder = clamp(15.0 * desiredTurnRate / 0.349, -15, 15);
 
 }
 

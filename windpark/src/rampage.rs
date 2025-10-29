@@ -18,5 +18,5 @@ pub const MOTOR_MOUNT_Y: f32 = 0.0;
 pub const CENTER_OF_WATER_DRAG_X: f32 = -1.0 * 0.3048; // 1 feet from center of mass
 pub const CENTER_OF_WATER_DRAG_Y: f32 = 0.0;
 
-pub const WIND_CENTER_FORCE_X: f32 = 1.0 * 0.3048;
+pub const WIND_CENTER_FORCE_X: f32 = 2.0 * 0.3048;
 pub const WIND_CENTER_FORCE_Y: f32 = 0.0;

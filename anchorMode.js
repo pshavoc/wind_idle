@@ -20,7 +20,7 @@ function runAnchorMode() {
     // Update rudder PID
     // Convert angleError to degrees for the PID controller as it was originally scaled by (180/Math.PI)
     let rudderOutput = rudderPID.update(0, -(angleError * (180/Math.PI)), DT);
-    controls.rudder = clamp(rudderOutput, -30, 30); // Clamping rudder output
+    controls.rudder = clamp(rudderOutput, -15, 15); // Clamping rudder output
 
 
     if(Math.abs(angleError) < (Math.PI/1.5)) { // If pointing somewhat towards target

@@ -100,7 +100,7 @@
                     <!-- Rudder Control -->
                     <div class="flex items-center gap-3">
                         <label for="rudder" class="font-medium text-gray-800">Rudder:</label>
-                        <input type="range" id="rudder" min="-30" max="30" value="0" class="w-40 h-2 bg-gray-300 rounded-lg appearance-none cursor-pointer">
+                        <input type="range" id="rudder" min="-15" max="15" value="0" class="w-40 h-2 bg-gray-300 rounded-lg appearance-none cursor-pointer">
                         <span id="rudderValue" class="font-mono text-gray-800 w-12 text-right">0°</span>
                     </div>
                 </div>
@@ -300,8 +300,8 @@
         function handleKeyboardControls() {
             if (keysPressed['ArrowUp']) controls.throttle = Math.min(100, controls.throttle + THROTTLE_KEY_RATE);
             if (keysPressed['ArrowDown']) controls.throttle = Math.max(-100, controls.throttle - THROTTLE_KEY_RATE);
-            if (keysPressed['ArrowLeft']) controls.rudder = Math.max(-30, controls.rudder - RUDDER_KEY_RATE);
-            if (keysPressed['ArrowRight']) controls.rudder = Math.min(30, controls.rudder + RUDDER_KEY_RATE);
+            if (keysPressed['ArrowLeft']) controls.rudder = Math.max(-15, controls.rudder - RUDDER_KEY_RATE);
+            if (keysPressed['ArrowRight']) controls.rudder = Math.min(15, controls.rudder + RUDDER_KEY_RATE);
         }
 
         function runAutopilot() {
@@ -479,14 +479,14 @@
                 
                 // rotate origin_x 
 
-                // bubbles.push({
-                //     x: origin_x,
-                //     y: origin_y,
-                //     vx: Math.sin(angle) * forceMag, // Bubbles move opposite to thrust, influenced by boat speed
-                //     vy: Math.cos(angle) * forceMag,
-                //     life: 1 + Math.random() * 10, // Lifespan in seconds
-                //     size: 1 + Math.random() * 3
-                // });
+                bubbles.push({
+                    x: origin_x,
+                    y: origin_y,
+                    vx: Math.sin(angle) * forceMag, // Bubbles move opposite to thrust, influenced by boat speed
+                    vy: Math.cos(angle) * forceMag,
+                    life: 1 + Math.random() * 10, // Lifespan in seconds
+                    size: 1 + Math.random() * 3
+                });
             }
 
             // --- Update existing bubbles ---

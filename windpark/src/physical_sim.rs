@@ -5,8 +5,9 @@ use crate::rampage::*;
 
 const AIR_DENSITY: f32 = 1.225; // kg/m^3, typical value for air density at sea level
 const WATER_DENSITY: f32 = 1000.0; // kg/m^3, typical value for water density
-const DRAG_COEFFICIENT: f32 = 0.2; // simplified drag coefficient
-const ANGULAR_DRAG_COEFFICIENT: f32 = 300.0; // angular drag coefficient
+const WIND_DRAG_COEFFICIENT: f32 = 5.5;
+const DRAG_COEFFICIENT: f32 = 0.15; // simplified drag coefficient
+const ANGULAR_DRAG_COEFFICIENT: f32 = 400.0; // angular drag coefficient
 
 struct RigidBody2D<T: DualNum<f32> + Copy + nalgebra::RealField> {
     position: Vector2<T>,
@@ -94,7 +95,7 @@ pub fn state_transition<D: DualNum<f32> + Copy + nalgebra::RealField>(input: SVe
     let relative_wind_velocity = wind_velocity - velocity;
     let wind_dynamic_pressure = relative_wind_velocity.norm_squared() * 0.5 * AIR_DENSITY;
 
-    let wind_force = relative_wind_velocity.normalize() * (wind_dynamic_pressure);
+    let wind_force = relative_wind_velocity.normalize() * (wind_dynamic_pressure * D::from(WIND_DRAG_COEFFICIENT));
     let center_of_drag = rigid_body.body_to_world(Vector2::new(WIND_CENTER_FORCE_X.into(), WIND_CENTER_FORCE_Y.into()));
     rigid_body.apply_force_at_point(wind_force, center_of_drag, *dt);
 

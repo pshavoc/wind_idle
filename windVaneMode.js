@@ -33,7 +33,7 @@ function control2(desiredTurnRate, desiredSpeed) {
     // controls.rudder = clamp(30.0 * rudderOutput, -30, 30);
 
     controls.throttle = clamp(100.0 * desiredSpeed / 5.0, -100, 100);
-    controls.rudder = clamp(30.0 * desiredTurnRate / 0.349, -30, 30);
+    controls.rudder = clamp(15.0 * desiredTurnRate / 0.349, -15, 15);
 }
 
 
