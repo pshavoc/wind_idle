@@ -465,25 +465,28 @@
                 const angleOffset = (Math.random() - 0.5) * 0.1; // Slight random angle for bubbles
                 const reversing = controls.throttle < 0;
                 // If reversing, thrust vector is forward (no +PI flip)
-                const angle = boat.angle + degreesToRadians(-controls.rudder) + (reversing ? Math.PI : 0) + angleOffset;
-                const forceMag = Math.abs(controls.throttle) * 0.02; // Bubbles move slower than the boat
+                const angle = boat.angle + degreesToRadians(-controls.rudder) + (reversing ? 0 : Math.PI) + angleOffset;
+                const forceMag = Math.abs(controls.throttle) * 0.1; // Bubbles move slower than the boat
 
-                let origin_x = 0.0;
-                let origin_y = 3.0;
+                let body_origin_x = -3.0;
+                let body_origin_y = 0.0;
 
-                origin_x = Math.cos(boat.angle) * origin_x - Math.sin(boat.angle) * origin_y;
-                origin_y = Math.sin(boat.angle) * origin_x + Math.cos(boat.angle) * origin_y;
+                // origin_x = Math.cos(boat.angle) * origin_x - Math.sin(boat.angle) * origin_y;
+                // origin_y = Math.sin(boat.angle) * origin_x + Math.cos(boat.angle) * origin_y;
 
-                origin_x += boat.pos.x;
-                origin_y += boat.pos.y;
-                
+                let origin_x = boat.pos.x;
+                let origin_y = boat.pos.y;
+
+                origin_x += Math.cos(boat.angle) * body_origin_x - Math.sin(boat.angle) * body_origin_y;
+                origin_y += Math.sin(boat.angle) * body_origin_x + Math.cos(boat.angle) * body_origin_y;
+
                 // rotate origin_x 
 
                 bubbles.push({
                     x: origin_x,
                     y: origin_y,
-                    vx: Math.sin(angle) * forceMag, // Bubbles move opposite to thrust, influenced by boat speed
-                    vy: Math.cos(angle) * forceMag,
+                    vx: Math.cos(angle) * forceMag, // Bubbles move opposite to thrust, influenced by boat speed
+                    vy: Math.sin(angle) * forceMag,
                     life: 1 + Math.random() * 10, // Lifespan in seconds
                     size: 1 + Math.random() * 3
                 });

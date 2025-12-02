@@ -50,9 +50,11 @@ impl Windpark {
             _ => self.x[i - 3],
         });
 
-        // let (f, jac) = jacobian(state_transition, input);
-        let (f, jac) = jacobian(physical_sim::state_transition, input);
-        let x_hat = f.into();
+        let x_hat = physical_sim::state_transition(input);
+        let x_hat = x_hat.into();
+
+        // let (f, jac) = jacobian(physical_sim::state_transition, input);
+        // let x_hat = f.into();
 
         self.x = x_hat;
     }
