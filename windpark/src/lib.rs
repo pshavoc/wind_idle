@@ -1,6 +1,8 @@
-mod rampage;
+mod kalman_filter;
 mod lsm_mode;
 mod physics;
+mod rampage;
+
 use std::f32;
 
 use nalgebra::{Rotation2, SVector, Vector2};
@@ -30,8 +32,13 @@ impl Windpark {
 
     #[wasm_bindgen]
     pub fn step(&mut self, rudder: Float, throttle: Float, dt: Float) {
-
-        let x_hat = physics::motorboat_model::state_transition(&self.motorboat_dynamics, dt, rudder, throttle, self.x.into());
+        let x_hat = physics::motorboat_model::state_transition(
+            &self.motorboat_dynamics,
+            dt,
+            rudder,
+            throttle,
+            self.x.into(),
+        );
         self.x = x_hat.into();
     }
 
