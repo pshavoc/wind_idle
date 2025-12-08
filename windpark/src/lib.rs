@@ -1,6 +1,6 @@
-mod physical_sim;
 mod rampage;
 mod lsm_mode;
+mod physics;
 use std::f32;
 
 use nalgebra::{Rotation2, SVector, Vector2};
@@ -10,25 +10,12 @@ use wasm_bindgen::prelude::*;
 // x, y, theta, a, vx, vy, wx, wy
 const NUM_STATES: usize = 8;
 
-const WATER_DENSITY: f32 = 1000.0; // kg/m^3, typical value for water density
-const AIR_DENSITY: f32 = 1.225; // kg/m^3, typical value for air density at sea level
-const KEEL_AREA: f32 = 1.0; // m^2, area of the keel
-const HULL_AREA: f32 = 5.0; // m^2, area of the hull exposed to wind
-
-const LIFT_COEFFICIENT: f32 = 0.5;
-const DRAG_COEFFICENT: f32 = 0.1;
-const THRUST_TORQUE_COEFFICIENT: f32 = 5.0;
-const THRUST_FORCE: f32 = 10.0;
-
-const BOAT_MASS: f32 = 300.0; // mass of boat in kg
-const MOMENT_OF_INERTIA: f32 = 250.0;
-
 type Float = f32;
 
 #[wasm_bindgen]
 pub struct Windpark {
     x: [Float; NUM_STATES],
-    covariance: nalgebra::SMatrix<Float, NUM_STATES, NUM_STATES>,
+    motorboat_dynamics: physics::motorboat_model::MotorboatModel,
 }
 
 #[wasm_bindgen]
@@ -37,26 +24,15 @@ impl Windpark {
     pub fn new() -> Windpark {
         Windpark {
             x: [0.0; NUM_STATES],
-            covariance: nalgebra::SMatrix::<Float, NUM_STATES, NUM_STATES>::identity(),
+            motorboat_dynamics: rampage::create_motorboat_model(),
         }
     }
 
     #[wasm_bindgen]
     pub fn step(&mut self, rudder: Float, throttle: Float, dt: Float) {
-        let input = SVector::<Float, 11>::from_fn(|i, _| match i {
-            0 => dt,
-            1 => rudder,
-            2 => throttle,
-            _ => self.x[i - 3],
-        });
 
-        let x_hat = physical_sim::state_transition(input);
-        let x_hat = x_hat.into();
-
-        // let (f, jac) = jacobian(physical_sim::state_transition, input);
-        // let x_hat = f.into();
-
-        self.x = x_hat;
+        let x_hat = physics::motorboat_model::state_transition(&self.motorboat_dynamics, dt, rudder, throttle, self.x.into());
+        self.x = x_hat.into();
     }
 
     #[wasm_bindgen]
@@ -104,89 +80,89 @@ fn predict_measurement<D: DualNum<f32> + Copy + nalgebra::RealField>(
     ])
 }
 
-fn state_transition<D: DualNum<f32> + Copy + nalgebra::RealField>(
-    input: SVector<D, 11>,
-) -> SVector<D, NUM_STATES> {
-    let dt = &input[0];
-    let rudder = &input[1];
-    let throttle = &input[2];
+// fn state_transition<D: DualNum<f32> + Copy + nalgebra::RealField>(
+//     input: SVector<D, 11>,
+// ) -> SVector<D, NUM_STATES> {
+//     let dt = &input[0];
+//     let rudder = &input[1];
+//     let throttle = &input[2];
 
-    let mut pos = Vector2::new(input[3].clone(), input[4].clone());
-    let mut theta = input[5].clone();
-    let mut angular_velocity = input[6].clone();
-    let mut velocity = Vector2::new(input[7].clone(), input[8].clone());
-    let wind_velocity = Vector2::new(input[9].clone(), input[10].clone());
+//     let mut pos = Vector2::new(input[3].clone(), input[4].clone());
+//     let mut theta = input[5].clone();
+//     let mut angular_velocity = input[6].clone();
+//     let mut velocity = Vector2::new(input[7].clone(), input[8].clone());
+//     let wind_velocity = Vector2::new(input[9].clone(), input[10].clone());
 
-    let boat_direction = Vector2::new(theta.cos(), theta.sin());
+//     let boat_direction = Vector2::new(theta.cos(), theta.sin());
 
-    let mut torque = D::zero();
-    let mut force = Vector2::zeros();
+//     let mut torque = D::zero();
+//     let mut force = Vector2::zeros();
 
-    // add engine force
-    let rudder_rotation = Rotation2::new(-rudder.clone());
-    force += (rudder_rotation * boat_direction.clone()) * (throttle.clone() * THRUST_FORCE);
-    torque += rudder.sin() * throttle.clone() * THRUST_TORQUE_COEFFICIENT;
+//     // add engine force
+//     let rudder_rotation = Rotation2::new(-rudder.clone());
+//     force += (rudder_rotation * boat_direction.clone()) * (throttle.clone() * THRUST_FORCE);
+//     torque += rudder.sin() * throttle.clone() * THRUST_TORQUE_COEFFICIENT;
 
-    let speed = velocity.norm();
-    if speed > 0.001.into() {
-        // calculate lift and drag forces from keel
-        let dynamic_pressure = velocity.norm_squared() * 0.5 * WATER_DENSITY;
+//     let speed = velocity.norm();
+//     if speed > 0.001.into() {
+//         // calculate lift and drag forces from keel
+//         let dynamic_pressure = velocity.norm_squared() * 0.5 * WATER_DENSITY;
 
-        // let a = boat_direction - velocity.normalize();
-        // let angle_of_attack = a[1].atan2(a[0]);
+//         // let a = boat_direction - velocity.normalize();
+//         // let angle_of_attack = a[1].atan2(a[0]);
 
-        let mut angle_of_attack = boat_direction.angle(&velocity);
-        if boat_direction.perp(&velocity.normalize()) < D::zero() {
-            angle_of_attack = -angle_of_attack;
-        }
+//         let mut angle_of_attack = boat_direction.angle(&velocity);
+//         if boat_direction.perp(&velocity.normalize()) < D::zero() {
+//             angle_of_attack = -angle_of_attack;
+//         }
 
-        // let cl = D::from(LIFT_COEFFICIENT) * (angle_of_attack * 2.0).sin();
-        let cd = D::from(0.05);
-        let cl = D::from(0.07) * angle_of_attack;
+//         // let cl = D::from(LIFT_COEFFICIENT) * (angle_of_attack * 2.0).sin();
+//         let cd = D::from(0.05);
+//         let cl = D::from(0.07) * angle_of_attack;
 
-        let lift = dynamic_pressure * cl * KEEL_AREA;
-        let drag = dynamic_pressure * cd * KEEL_AREA;
+//         let lift = dynamic_pressure * cl * KEEL_AREA;
+//         let drag = dynamic_pressure * cd * KEEL_AREA;
 
-        let rotate90 = Rotation2::new(D::from(-f32::consts::FRAC_PI_2));
-        force += (rotate90 * boat_direction) * lift;
+//         let rotate90 = Rotation2::new(D::from(-f32::consts::FRAC_PI_2));
+//         force += (rotate90 * boat_direction) * lift;
 
-        force -= velocity.normalize() * drag;
-    }
+//         force -= velocity.normalize() * drag;
+//     }
 
-    let angular_damping = (angular_velocity * angular_velocity) * 200.0;
-    if angular_velocity > D::zero() {
-        torque -= angular_damping;
-    } else if angular_velocity < D::zero() {
-        torque += angular_damping;
-    }
+//     let angular_damping = (angular_velocity * angular_velocity) * 200.0;
+//     if angular_velocity > D::zero() {
+//         torque -= angular_damping;
+//     } else if angular_velocity < D::zero() {
+//         torque += angular_damping;
+//     }
 
-    // calculate apparent wind
-    let apparent_wind = wind_velocity - velocity;
-    let dynamic_pressure = apparent_wind.norm_squared() * 0.5 * AIR_DENSITY * HULL_AREA;
-    let mut angle_of_attack = boat_direction.angle(&apparent_wind);
-    if boat_direction.perp(&apparent_wind.normalize()) < D::zero() {
-        angle_of_attack = -angle_of_attack;
-    }
-    force += wind_velocity.normalize() * dynamic_pressure;
-    torque += angle_of_attack.sin() * dynamic_pressure;
+//     // calculate apparent wind
+//     let apparent_wind = wind_velocity - velocity;
+//     let dynamic_pressure = apparent_wind.norm_squared() * 0.5 * AIR_DENSITY * HULL_AREA;
+//     let mut angle_of_attack = boat_direction.angle(&apparent_wind);
+//     if boat_direction.perp(&apparent_wind.normalize()) < D::zero() {
+//         angle_of_attack = -angle_of_attack;
+//     }
+//     force += wind_velocity.normalize() * dynamic_pressure;
+//     torque += angle_of_attack.sin() * dynamic_pressure;
 
-    velocity += force * (dt.clone() / BOAT_MASS);
-    pos += velocity * dt.clone();
+//     velocity += force * (dt.clone() / BOAT_MASS);
+//     pos += velocity * dt.clone();
 
-    angular_velocity += torque * (dt.clone() / MOMENT_OF_INERTIA);
-    theta += angular_velocity * dt.clone();
+//     angular_velocity += torque * (dt.clone() / MOMENT_OF_INERTIA);
+//     theta += angular_velocity * dt.clone();
 
-    SVector::from([
-        pos[0],
-        pos[1],
-        theta,
-        angular_velocity,
-        velocity[0],
-        velocity[1],
-        wind_velocity[0],
-        wind_velocity[1],
-    ])
-}
+//     SVector::from([
+//         pos[0],
+//         pos[1],
+//         theta,
+//         angular_velocity,
+//         velocity[0],
+//         velocity[1],
+//         wind_velocity[0],
+//         wind_velocity[1],
+//     ])
+// }
 
 #[cfg(test)]
 mod tests {

@@ -20,3 +20,21 @@ pub const CENTER_OF_WATER_DRAG_Y: f32 = 0.0;
 
 pub const WIND_CENTER_FORCE_X: f32 = 2.0 * 0.3048;
 pub const WIND_CENTER_FORCE_Y: f32 = 0.0;
+
+const WIND_DRAG_COEFFICIENT: f32 = 5.5;
+const DRAG_COEFFICIENT: f32 = 0.15;
+const ANGULAR_DRAG_COEFFICIENT: f32 = 400.0; // angular drag coefficient
+
+
+pub fn create_motorboat_model() -> crate::physics::motorboat_model::MotorboatModel {
+    crate::physics::motorboat_model::MotorboatModel {
+        mass: MASS,
+        moment_of_inertia: MOMENT_OF_INERTIA,
+        motor_mount_point: nalgebra::Vector2::new(MOTOR_MOUNT_X, MOTOR_MOUNT_Y),
+        center_of_water_drag: nalgebra::Vector2::new(CENTER_OF_WATER_DRAG_X, CENTER_OF_WATER_DRAG_Y),
+        wind_center_force: nalgebra::Vector2::new(WIND_CENTER_FORCE_X, WIND_CENTER_FORCE_Y),
+        water_drag_coefficient: DRAG_COEFFICIENT,
+        wind_drag_coefficient: WIND_DRAG_COEFFICIENT,
+        angular_drag_coefficient: ANGULAR_DRAG_COEFFICIENT,
+    }
+}
