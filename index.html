@@ -199,6 +199,22 @@
             };
         }
 
+        function normalDistribution(mu = 0, sigma = 1) {
+            let u1 = 0, u2 = 0;
+            // Convert [0, 1) to (0, 1) to avoid log(0) which is -Infinity
+            while (u1 === 0) u1 = Math.random();
+            while (u2 === 0) u2 = Math.random();
+
+            // Box-Muller transform
+            const z0 = Math.sqrt(-2.0 * Math.log(u1)) * Math.cos(2.0 * Math.PI * u2);
+            // z1 is the second value, which can be stored for the next call if needed for efficiency
+            // const z1 = Math.sqrt(-2.0 * Math.log(u1)) * Math.sin(2.0 * Math.PI * u2);
+
+            // Scale and translate to the desired mean (mu) and standard deviation (sigma)
+            return z0 * sigma + mu;
+        }
+
+
 
     </script>
 
@@ -373,9 +389,19 @@
             if (now - filter_time > 100) {
                 ekf.predict(degreesToRadians(controls.rudder), controls.throttle);
                 filter_counter += 1;
+
+                if (filter_counter % 5 == 0) {
+                    const compass_reading = normalDistribution(boat.angle, 0.1);
+                    ekf.update_compass(compass_reading, 0.1);
+                }
+
                 if (filter_counter % 10 == 0) {
                     if (gpsUpdateEnabled) {
-                        ekf.update_gps(boat.pos.x, boat.pos.y, 2.0);
+
+                        const gps_x = normalDistribution(boat.pos.x, 1.0);
+                        const gps_y = normalDistribution(boat.pos.y, 1.0);
+
+                        ekf.update_gps(gps_x, gps_y, 2.0);
                     }
 
                     let pos = ekf.pos();
@@ -386,6 +412,9 @@
                     let wind_speed = wind_vector.length();
                     console.log("EKF velocity:", vel[0].toFixed(2), vel[1].toFixed(2));
                     console.log("EKF wind dir:", wind_dir.toFixed(2), "wind speed:", wind_speed.toFixed(2));
+
+                    const wind_dir_error = radiansToDegrees(Math.abs(wind_dir - trueWind.angle()));
+                    console.log("Wind dir error:", wind_dir_error.toFixed(2));
                 }
                 filter_time = now;
             }

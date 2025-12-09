@@ -8,7 +8,6 @@ type CovarianceMatrix = nalgebra::SMatrix<
     { physics::motorboat_model::NUM_STATES },
     { physics::motorboat_model::NUM_STATES },
 >;
-type HMatrix = nalgebra::SMatrix<Float, 2, { physics::motorboat_model::NUM_STATES }>;
 
 use crate::{Float, physics};
 
@@ -115,8 +114,17 @@ impl MotorboatDynamicsKalmanFilter {
         gps_position_y: Float,
         gps_position_variance: Float,
     ) {
+        type HMatrix = nalgebra::SMatrix<Float, 2, { physics::motorboat_model::NUM_STATES }>;
+
         let z = SVector::<Float, 2>::from_row_slice(&[gps_position_x, gps_position_y]);
         let R = nalgebra::Matrix2::<Float>::identity() * gps_position_variance.abs();
+
+        let h = |state: &[Float; physics::motorboat_model::NUM_STATES]| {
+            SVector::<Float, 2>::from_row_slice(&[
+                state[physics::motorboat_model::STATE_POSITION_X],
+                state[physics::motorboat_model::STATE_POSITION_Y],
+            ])
+        };
 
         let y = z - h(&self.state_estimate);
 
@@ -142,13 +150,45 @@ impl MotorboatDynamicsKalmanFilter {
         self.covariance_estimate =
             (CovarianceMatrix::identity() - K * H) * self.covariance_estimate;
     }
-}
 
-fn h(state: &[Float; physics::motorboat_model::NUM_STATES]) -> SVector<Float, 2> {
-    SVector::<Float, 2>::from_row_slice(&[
-        state[physics::motorboat_model::STATE_POSITION_X],
-        state[physics::motorboat_model::STATE_POSITION_Y],
-    ])
+    #[allow(non_snake_case)]
+    #[wasm_bindgen]
+    pub fn update_compass(&mut self, compass_heading: Float, compass_heading_variance: Float) {
+        type HMatrix = nalgebra::SMatrix<Float, 1, { physics::motorboat_model::NUM_STATES }>;
+
+        let z = SVector::<Float, 1>::from_row_slice(&[compass_heading]);
+        let R = nalgebra::Matrix1::<Float>::identity() * compass_heading_variance.abs();
+
+        let h = |state: &[Float; physics::motorboat_model::NUM_STATES]| {
+            SVector::<Float, 1>::from_row_slice(&[
+                state[physics::motorboat_model::STATE_ORIENTATION]
+            ])
+        };
+
+        let y = z - h(&self.state_estimate);
+
+        let f = |x| {
+            physics::motorboat_model::state_transition(
+                &self.model,
+                self.dt,
+                self.last_rudder,
+                self.last_throttle,
+                x,
+            )
+        };
+
+        let (x, jac) = jacobian(f, self.state_estimate.into());
+
+        let H = HMatrix::from_fn(|i, j| jac[(physics::motorboat_model::STATE_ORIENTATION + i, j)]);
+
+        let S = H * self.covariance_estimate * H.transpose() + R;
+
+        let K = self.covariance_estimate * H.transpose() * S.try_inverse().unwrap();
+
+        self.state_estimate = (x + K * y).into();
+        self.covariance_estimate =
+            (CovarianceMatrix::identity() - K * H) * self.covariance_estimate;
+    }
 }
 
 #[cfg(test)]
@@ -159,6 +199,30 @@ mod tests {
     fn test_kalman_predict() {
         let model = crate::rampage::create_motorboat_model();
         let mut kf = MotorboatDynamicsKalmanFilter::new(0.1, model);
+
+        kf.predict(0.0, 0.0);
+
+        // assert that the state estimate is finite numbers
+        for x in kf.state_estimate.iter() {
+            assert!(x.is_finite());
+        }
+    }
+
+    #[test]
+    fn test_kalman_update_compass() {
+        let model = crate::rampage::create_motorboat_model();
+        let mut kf = MotorboatDynamicsKalmanFilter::new(0.1, model);
+
+        kf.predict(0.0, 0.0);
+        kf.predict(0.0, 0.0);
+        kf.predict(0.0, 0.0);
+
+        kf.update_compass(0.1, 0.01);
+
+        // assert that the state estimate is finite numbers
+        for x in kf.state_estimate.iter() {
+            assert!(x.is_finite());
+        }
 
         kf.predict(0.0, 0.0);
 
