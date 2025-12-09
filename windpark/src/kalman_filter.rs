@@ -74,6 +74,11 @@ impl MotorboatDynamicsKalmanFilter {
     }
 
     #[wasm_bindgen]
+    pub fn wind_velocity(&self) -> Vec<Float> {
+        vec![self.state_estimate[6], self.state_estimate[7]]
+    }
+
+    #[wasm_bindgen]
     pub fn predict(&mut self, rudder: Float, throttle: Float) {
         self.last_rudder = rudder;
         self.last_throttle = throttle;
