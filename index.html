@@ -401,17 +401,19 @@
                         const gps_x = normalDistribution(boat.pos.x, 1.0);
                         const gps_y = normalDistribution(boat.pos.y, 1.0);
 
-                        ekf.update_gps(gps_x, gps_y, 2.0);
+                        ekf.update_gps(gps_x, gps_y, 1.0);
                     }
 
                     let pos = ekf.pos();
                     let vel = ekf.velocity();
+                    let angular_velocity = ekf.angular_velocity();
                     let wind = ekf.wind_velocity();
                     let wind_vector = new Vector2D(wind[0], wind[1]);
                     let wind_dir = wind_vector.angle();
                     let wind_speed = wind_vector.length();
                     console.log("EKF velocity:", vel[0].toFixed(2), vel[1].toFixed(2));
                     console.log("EKF wind dir:", wind_dir.toFixed(2), "wind speed:", wind_speed.toFixed(2));
+                    console.log("EKF angular velocity:", angular_velocity.toFixed(2), "r/s");
 
                     const wind_dir_error = radiansToDegrees(Math.abs(wind_dir - trueWind.angle()));
                     console.log("Wind dir error:", wind_dir_error.toFixed(2));
