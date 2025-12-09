@@ -9,6 +9,8 @@ use nalgebra::{Rotation2, SVector, Vector2};
 use num_dual::*;
 use wasm_bindgen::prelude::*;
 
+pub use kalman_filter::MotorboatDynamicsKalmanFilter;
+
 // x, y, theta, a, vx, vy, wx, wy
 const NUM_STATES: usize = 8;
 

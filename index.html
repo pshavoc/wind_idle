@@ -174,12 +174,13 @@
     </script>
 
     <script type="module">
-        import init, { Windpark } from './windpark/pkg/windpark.js';
+        import init, { Windpark, MotorboatDynamicsKalmanFilter } from './windpark/pkg/windpark.js';
 
         init().then(() => {
             console.log('Windpark module initialized');
             // You can now use the functions from the windpark module
             sim = new Windpark();
+            ekf = new MotorboatDynamicsKalmanFilter();
 
             initialize();
 
@@ -188,6 +189,7 @@
         });
 
         let sim = null;
+        let ekf = null;
 
         const canvas = document.getElementById('simulationCanvas');
         const ctx = canvas.getContext('2d');
@@ -313,6 +315,7 @@
         // --- Main Loop ---
         let physicsTime = 0.0;
         let filter_time = 0.0;
+        let filter_counter = 0;
 
         function animate(now) { 
             requestAnimationFrame(animate);
@@ -323,9 +326,17 @@
                 physicsTime += DT * 1000; // Convert to milliseconds
             }
 
-            if (now - filter_time > 1000) {
-                //kalmanFilter.run(1.0, boat, controls);
-                //filter_time = now;
+            if (now - filter_time > 100) {
+                ekf.predict(degreesToRadians(controls.rudder), controls.throttle);
+                filter_counter += 1;
+                if (filter_counter % 10 == 0) {
+                    ekf.update_gps(boat.pos.x, boat.pos.y, 2.0);
+
+                    let pos = ekf.pos();
+                    let vel = ekf.velocity();
+                    console.log("EKF Position:", pos[0].toFixed(2), pos[1].toFixed(2));
+                }
+                filter_time = now;
             }
             
 

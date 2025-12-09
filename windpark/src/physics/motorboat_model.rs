@@ -13,6 +13,16 @@ use crate::physics::{
 /// wind vx, wind vy
 pub const NUM_STATES: usize = 8;
 
+pub const STATE_POSITION_X: usize = 0;
+pub const STATE_POSITION_Y: usize = 1;
+pub const STATE_ORIENTATION: usize = 2;
+pub const STATE_ANGULAR_VELOCITY: usize = 3;
+pub const STATE_VELOCITY_X: usize = 4;
+pub const STATE_VELOCITY_Y: usize = 5;
+pub const STATE_WIND_VELOCITY_X: usize = 6;
+pub const STATE_WIND_VELOCITY_Y: usize = 7;
+
+
 pub struct MotorboatModel {
     pub mass: f32,
     pub moment_of_inertia: f32,
@@ -61,7 +71,10 @@ pub fn state_transition<D: DualNum<f32> + Copy + nalgebra::RealField>(
 
     // drag force is the opposite direction of the velocity vector and proportional to the square of the speed
     let speed = velocity.norm();
-    if speed > 0.001.into() {
+
+    let eps = D::from(0.001);
+
+    if speed > eps {
         let dynamic_pressure: D = speed * speed * 0.5 * D::from(WATER_DENSITY);
         let drag_force =
             velocity.normalize() * (dynamic_pressure * -D::from(model.water_drag_coefficient));
@@ -75,13 +88,17 @@ pub fn state_transition<D: DualNum<f32> + Copy + nalgebra::RealField>(
     let relative_wind_velocity = wind_velocity - velocity;
     let wind_dynamic_pressure = relative_wind_velocity.norm_squared() * 0.5 * AIR_DENSITY;
 
-    let wind_force = relative_wind_velocity.normalize()
-        * (wind_dynamic_pressure * D::from(model.wind_drag_coefficient));
-    let center_of_drag = rigid_body.body_to_world(Vector2::new(
-        model.wind_center_force.x.into(),
-        model.wind_center_force.y.into(),
-    ));
-    rigid_body.apply_force_at_point(wind_force, center_of_drag, dt);
+    if wind_dynamic_pressure > eps {
+
+        let wind_force = relative_wind_velocity.normalize()
+            * (wind_dynamic_pressure * D::from(model.wind_drag_coefficient));
+        let center_of_drag = rigid_body.body_to_world(Vector2::new(
+            model.wind_center_force.x.into(),
+            model.wind_center_force.y.into(),
+        ));
+        rigid_body.apply_force_at_point(wind_force, center_of_drag, dt);
+
+    }
 
     let angular_drag_torque = -D::one().copysign(rigid_body.angular_velocity)
         * (rigid_body.angular_velocity
