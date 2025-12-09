@@ -25,8 +25,6 @@ pub struct MotorboatDynamicsKalmanFilter {
 
 #[wasm_bindgen]
 impl MotorboatDynamicsKalmanFilter {
-
-    
     fn new(dt: Float, model: physics::motorboat_model::MotorboatModel) -> Self {
         Self {
             model,
@@ -41,10 +39,14 @@ impl MotorboatDynamicsKalmanFilter {
 
     #[wasm_bindgen(constructor)]
     pub fn create() -> Self {
-        Self::new(
-            0.1,
-            crate::rampage::create_motorboat_model(),
-        )
+        let mut model = crate::rampage::create_motorboat_model();
+        model.mass *= 1.3;
+        model.moment_of_inertia *= 0.8;
+        model.water_drag_coefficient *= 1.3;
+        model.wind_drag_coefficient *= 0.8;
+        model.angular_drag_coefficient *= 1.2;
+
+        Self::new(0.1, model)
     }
 
     #[wasm_bindgen]
@@ -107,7 +109,12 @@ impl MotorboatDynamicsKalmanFilter {
 
     #[allow(non_snake_case)]
     #[wasm_bindgen]
-    pub fn update_gps(&mut self, gps_position_x: Float, gps_position_y: Float, gps_position_variance: Float) {
+    pub fn update_gps(
+        &mut self,
+        gps_position_x: Float,
+        gps_position_y: Float,
+        gps_position_variance: Float,
+    ) {
         let z = SVector::<Float, 2>::from_row_slice(&[gps_position_x, gps_position_y]);
         let R = nalgebra::Matrix2::<Float>::identity() * gps_position_variance.abs();
 
@@ -153,14 +160,11 @@ mod tests {
         let model = crate::rampage::create_motorboat_model();
         let mut kf = MotorboatDynamicsKalmanFilter::new(0.1, model);
 
-        
-        
         kf.predict(0.0, 0.0);
 
         // assert that the state estimate is finite numbers
         for x in kf.state_estimate.iter() {
             assert!(x.is_finite());
         }
-
     }
 }

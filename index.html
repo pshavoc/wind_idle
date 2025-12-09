@@ -112,6 +112,10 @@
                     <button id="newWindBtn"
                         class="bg-purple-500 hover:bg-purple-600 text-white font-bold py-2 px-4 rounded-lg">New
                         Wind</button>
+                    <!-- GPS Toggle Button -->
+                    <button id="gpsBtn"
+                        class="bg-green-500 hover:bg-green-600 text-white font-bold py-2 px-4 rounded-lg">GPS:
+                        ON</button>
                     <!-- Throttle Control -->
                     <div class="flex items-center gap-3">
                         <label for="throttle" class="font-medium text-gray-800">Throttle:</label>
@@ -149,6 +153,7 @@
         let controls = { throttle: 0, rudder: 0 };
         let keysPressed = {};
         let autopilotMode = 'OFF';
+        let gpsUpdateEnabled = true;
         let anchorTarget = null;
         let anchorIntegralError = 0; // Accumulated integral error for anchor mode
         let bubbles = []; // Add this line to store bubble particles
@@ -226,6 +231,7 @@
         const estWindDirDisplay = document.getElementById('estWindDirDisplay'), autopilotBtn = document.getElementById('autopilotBtn');
         const autopilotStatus = document.getElementById('autopilotStatus');
         const newWindBtn = document.getElementById('newWindBtn');
+        const gpsBtn = document.getElementById('gpsBtn');
 
 
 
@@ -258,6 +264,7 @@
             rudderSlider.addEventListener('input', (e) => { if (autopilotMode === 'OFF') controls.rudder = parseInt(e.target.value, 10); });
             autopilotBtn.addEventListener('click', cycleAutopilotMode);
             newWindBtn.addEventListener('click', generateNewWind); // Add event listener for new wind button
+            gpsBtn.addEventListener('click', toggleGps);
             window.addEventListener('keydown', (e) => {
                 if (autopilotMode === 'OFF') keysPressed[e.key] = true;
                 if (["ArrowUp", "ArrowDown", "ArrowLeft", "ArrowRight"].includes(e.key)) e.preventDefault();
@@ -311,6 +318,19 @@
             }
         }
 
+        function toggleGps() {
+            gpsUpdateEnabled = !gpsUpdateEnabled;
+            if (gpsUpdateEnabled) {
+                gpsBtn.textContent = 'GPS: ON';
+                gpsBtn.classList.replace('bg-red-500', 'bg-green-500');
+                gpsBtn.classList.replace('hover:bg-red-600', 'hover:bg-green-600');
+            } else {
+                gpsBtn.textContent = 'GPS: OFF';
+                gpsBtn.classList.replace('bg-green-500', 'bg-red-500');
+                gpsBtn.classList.replace('hover:bg-green-600', 'hover:bg-red-600');
+            }
+        }
+
         function generateNewWind() {
             baseWindSpeed = Math.random() * 8; // Speed in m/s
             baseWindDirRadians = Math.random() * 2 * Math.PI;
@@ -354,7 +374,9 @@
                 ekf.predict(degreesToRadians(controls.rudder), controls.throttle);
                 filter_counter += 1;
                 if (filter_counter % 10 == 0) {
-                    ekf.update_gps(boat.pos.x, boat.pos.y, 2.0);
+                    if (gpsUpdateEnabled) {
+                        ekf.update_gps(boat.pos.x, boat.pos.y, 2.0);
+                    }
 
                     let pos = ekf.pos();
                     let vel = ekf.velocity();
