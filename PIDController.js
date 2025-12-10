@@ -1,3 +1,5 @@
+import { clamp } from './utils.js';
+
 class PIDController {
     constructor(kp, ki, kd, maxIntegral) {
         this.kp = kp;
@@ -38,3 +40,5 @@ class PIDController {
         this.previousError = 0;
     }
 }
+
+export { PIDController };

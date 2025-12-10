@@ -22,7 +22,6 @@ pub const STATE_VELOCITY_Y: usize = 5;
 pub const STATE_WIND_VELOCITY_X: usize = 6;
 pub const STATE_WIND_VELOCITY_Y: usize = 7;
 
-
 pub struct MotorboatModel {
     pub mass: f32,
     pub moment_of_inertia: f32,
@@ -32,6 +31,7 @@ pub struct MotorboatModel {
     pub water_drag_coefficient: f32,
     pub wind_drag_coefficient: f32,
     pub angular_drag_coefficient: f32,
+    pub motor_scaler: f32,
 }
 
 impl MotorboatModel {}
@@ -61,7 +61,7 @@ pub fn state_transition<D: DualNum<f32> + Copy + nalgebra::RealField>(
         moment_of_inertia: model.moment_of_inertia.into(),
     };
 
-    let motor_force = polar_to_vector2(throttle * 30.0, orientation - rudder);
+    let motor_force = polar_to_vector2(throttle * model.motor_scaler, orientation - rudder);
     let motor_mount_point = rigid_body.body_to_world(Vector2::new(
         model.motor_mount_point.x.into(),
         model.motor_mount_point.y.into(),
@@ -89,7 +89,6 @@ pub fn state_transition<D: DualNum<f32> + Copy + nalgebra::RealField>(
     let wind_dynamic_pressure = relative_wind_velocity.norm_squared() * 0.5 * AIR_DENSITY;
 
     if wind_dynamic_pressure > eps {
-
         let wind_force = relative_wind_velocity.normalize()
             * (wind_dynamic_pressure * D::from(model.wind_drag_coefficient));
         let center_of_drag = rigid_body.body_to_world(Vector2::new(
@@ -97,7 +96,6 @@ pub fn state_transition<D: DualNum<f32> + Copy + nalgebra::RealField>(
             model.wind_center_force.y.into(),
         ));
         rigid_body.apply_force_at_point(wind_force, center_of_drag, dt);
-
     }
 
     let angular_drag_torque = -D::one().copysign(rigid_body.angular_velocity)
