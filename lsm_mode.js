@@ -2,10 +2,10 @@ import { ekf, controls } from './app.js';
 import { PIDController } from './PIDController.js';
 import { clamp, degreesToRadians } from './utils.js';
 
-const THROTTLE_P_GAIN = 50.0;
-const THROTTLE_I_GAIN = 0.0;
-const RUDDER_P_GAIN = 50.0;
-const RUDDER_I_GAIN = 6.0;
+const THROTTLE_P_GAIN = 10.0;
+const THROTTLE_I_GAIN = 10.0;
+const RUDDER_P_GAIN = 10.0;
+const RUDDER_I_GAIN = 20.0;
 
 const throttlePID = new PIDController(THROTTLE_P_GAIN, THROTTLE_I_GAIN, 0, 100);
 const rudderPID = new PIDController(RUDDER_P_GAIN, RUDDER_I_GAIN, 0, 1);
@@ -42,10 +42,10 @@ function getControllerInput() {
     previousButtonStates[gp.index] = gp.buttons.map(b => b.pressed);
 
 
-    gear = clamp(gear, -0.5, 1.0);
+    gear = clamp(gear, -5, 10);
 
-    speed = gear * gp.buttons[6].value;
-    turnRate = gp.axes[0] * 0.5;
+    speed = gear / 10.0 * gp.buttons[6].value;
+    turnRate = gp.axes[0];
 
     return { speed, turnRate };
 
@@ -77,7 +77,10 @@ function acroModeControl() {
     const forwardSpeed = Math.cos(angle) * vx + Math.sin(angle) * vy;
 
     // max turn rate of boat is 15 degrees per second
-    const desiredTurnRate = degreesToRadians(turnRate * 15.0);
+    const desiredTurnRate = degreesToRadians(turnRate * 20.0);
+
+    // console.log(`desiredSpeed: ${desiredSpeed.toFixed(2)}, forwardSpeed: ${forwardSpeed.toFixed(2)}`);
+    // console.log(`desiredTurnRate: ${desiredTurnRate.toFixed(2)}, angularVelocity: ${angularVelocity.toFixed(2)}`);
 
     // Update PID controllers
     controls.rudder = clamp(rudderPID.update(desiredTurnRate, angularVelocity, dt), -15, 15);

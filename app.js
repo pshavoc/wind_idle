@@ -71,6 +71,8 @@ function initialize() {
     window.addEventListener('keyup', (e) => { keysPressed[e.key] = false; });
     window.addEventListener('resize', () => { canvas.width = window.innerWidth; canvas.height = window.innerHeight; });
 
+    filter_time = performance.now();
+    physicsTime = performance.now();
     requestAnimationFrame(animate);
 }
 
@@ -162,44 +164,39 @@ function handleKeyboardControls() {
     if (keysPressed['ArrowRight']) controls.rudder = Math.min(15, controls.rudder + RUDDER_KEY_RATE);
 }
 
-function runAutopilot() {
-    if (autopilotMode === 'ANCHOR') runAnchorMode();
-    else if (autopilotMode === 'WIND_VANE') runWindVaneMode();
-    else if (autopilotMode === 'LSM') lsmModeControl();
-}
-
 // --- Main Loop ---
 let physicsTime = 0.0;
 let filter_time = 0.0;
 let filter_counter = 0;
+let last_pilot_time = 0.0;
 
-function animate(now) {
-    requestAnimationFrame(animate);
+function animate() {
 
+    const now = performance.now();
 
     while (physicsTime < now) {
         update_physics(DT);
-        physicsTime += DT * 1000; // Convert to milliseconds
+        physicsTime += DT * 1000.0;
     }
 
-    if (now - filter_time > 100) {
+    while (filter_time < now) {
+        filter_time += 100;
+
         ekf.predict(degreesToRadians(controls.rudder), controls.throttle);
         filter_counter += 1;
 
         if (filter_counter % 5 == 0) {
             if (compassUpdateEnabled) {
-                const compass_reading = normalDistribution(boat.angle, 0.1);
-                ekf.update_compass(compass_reading, 0.1);
+                const compass_reading = normalDistribution(boat.angle, 0.05);
+                ekf.update_compass(compass_reading, 0.25);
             }
         }
 
         if (filter_counter % 10 == 0) {
             if (gpsUpdateEnabled) {
-
-                const gps_x = normalDistribution(boat.pos.x, 1.0);
-                const gps_y = normalDistribution(boat.pos.y, 1.0);
-
-                ekf.update_gps(gps_x, gps_y, 1.0);
+                const gps_x = normalDistribution(boat.pos.x, 0.1);
+                const gps_y = normalDistribution(boat.pos.y, 0.1);
+                ekf.update_gps(gps_x, gps_y, 0.2);
             }
 
             let pos = ekf.pos();
@@ -216,12 +213,17 @@ function animate(now) {
             const wind_dir_error = radiansToDegrees(Math.abs(wind_dir - trueWind.angle()));
             console.log("Wind dir error:", wind_dir_error.toFixed(2));
         }
-        filter_time = now;
     }
 
 
-    pilot();
+    if ((now - last_pilot_time) > 200) {
+        pilot();
+        last_pilot_time = now;
+    }
+
     draw();
+
+    requestAnimationFrame(animate);
 }
 
 function pilot() {
@@ -528,7 +530,7 @@ let anchorIntegralError = 0; // Accumulated integral error for anchor mode
 let bubbles = []; // Add this line to store bubble particles
 
 // --- Simulation Constants ---
-const DT = 1 / 20; // 50Hz
+const DT = 1 / 50; // 50Hz
 const BOAT_LENGTH = 40, BOAT_WIDTH = 15, MAX_THROTTLE_FORCE = 2000.0;
 const BOAT_MASS = 300; // Mass of the boat in kg
 const WATER_DRAG_COEFFICIENT = 0.08, WIND_FORCE_COEFFICIENT = 0.001;

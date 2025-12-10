@@ -29,7 +29,7 @@ impl MotorboatDynamicsKalmanFilter {
             model,
             state_estimate: [0.0; physics::motorboat_model::NUM_STATES],
             covariance_estimate: CovarianceMatrix::identity(),
-            process_noise: CovarianceMatrix::identity() * 0.01,
+            process_noise: CovarianceMatrix::identity() * 0.1,
             last_rudder: 0.0,
             last_throttle: 0.0,
             dt,
@@ -44,7 +44,7 @@ impl MotorboatDynamicsKalmanFilter {
         model.water_drag_coefficient *= 1.3;
         model.wind_drag_coefficient *= 0.8;
         model.angular_drag_coefficient *= 1.2;
-        model.motor_scaler *= 1.3;
+        // model.motor_scaler *= 1.3;
 
         Self::new(0.1, model)
     }
