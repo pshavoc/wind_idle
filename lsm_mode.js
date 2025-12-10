@@ -5,7 +5,7 @@ import { clamp, degreesToRadians } from './utils.js';
 const THROTTLE_P_GAIN = 10.0;
 const THROTTLE_I_GAIN = 10.0;
 const RUDDER_P_GAIN = 10.0;
-const RUDDER_I_GAIN = 20.0;
+const RUDDER_I_GAIN = 40.0;
 
 const throttlePID = new PIDController(THROTTLE_P_GAIN, THROTTLE_I_GAIN, 0, 100);
 const rudderPID = new PIDController(RUDDER_P_GAIN, RUDDER_I_GAIN, 0, 1);

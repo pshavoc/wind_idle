@@ -71,8 +71,8 @@ function initialize() {
     window.addEventListener('keyup', (e) => { keysPressed[e.key] = false; });
     window.addEventListener('resize', () => { canvas.width = window.innerWidth; canvas.height = window.innerHeight; });
 
-    filter_time = performance.now();
-    physicsTime = performance.now();
+    // filter_time = performance.now();
+    // physicsTime = performance.now();
     requestAnimationFrame(animate);
 }
 
@@ -165,8 +165,8 @@ function handleKeyboardControls() {
 }
 
 // --- Main Loop ---
-let physicsTime = 0.0;
-let filter_time = 0.0;
+let physicsTime = 0;
+let filter_time = 0;
 let filter_counter = 0;
 let last_pilot_time = 0.0;
 
@@ -254,6 +254,9 @@ function updateTrueWindWithNoise(dt) {
 
     trueWind.x = Math.cos(currentWindDirRadians) * (baseWindSpeed + windSpeedNoise);
     trueWind.y = Math.sin(currentWindDirRadians) * (baseWindSpeed + windSpeedNoise);
+
+    // trueWind.x = 0;
+    // trueWind.y = 0;
 }
 
 function update_physics(dt) {
@@ -530,7 +533,7 @@ let anchorIntegralError = 0; // Accumulated integral error for anchor mode
 let bubbles = []; // Add this line to store bubble particles
 
 // --- Simulation Constants ---
-const DT = 1 / 50; // 50Hz
+const DT = 1.0 / 50.0; // 30Hz
 const BOAT_LENGTH = 40, BOAT_WIDTH = 15, MAX_THROTTLE_FORCE = 2000.0;
 const BOAT_MASS = 300; // Mass of the boat in kg
 const WATER_DRAG_COEFFICIENT = 0.08, WIND_FORCE_COEFFICIENT = 0.001;

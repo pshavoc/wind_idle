@@ -39,11 +39,11 @@ impl MotorboatDynamicsKalmanFilter {
     #[wasm_bindgen(constructor)]
     pub fn create() -> Self {
         let mut model = crate::rampage::create_motorboat_model();
-        model.mass *= 1.3;
-        model.moment_of_inertia *= 0.8;
-        model.water_drag_coefficient *= 1.3;
-        model.wind_drag_coefficient *= 0.8;
-        model.angular_drag_coefficient *= 1.2;
+        // model.mass *= 1.3;
+        // model.moment_of_inertia *= 0.8;
+        // model.water_drag_coefficient *= 1.3;
+        // model.wind_drag_coefficient *= 0.8;
+        // model.angular_drag_coefficient *= 1.2;
         // model.motor_scaler *= 1.3;
 
         Self::new(0.1, model)
@@ -129,19 +129,34 @@ impl MotorboatDynamicsKalmanFilter {
 
         let y = z - h(&self.state_estimate);
 
-        let f = |x| {
-            physics::motorboat_model::state_transition(
-                &self.model,
-                self.dt,
-                self.last_rudder,
-                self.last_throttle,
-                x,
-            )
-        };
+        // let f = |x| {
+        //     physics::motorboat_model::state_transition(
+        //         &self.model,
+        //         self.dt,
+        //         self.last_rudder,
+        //         self.last_throttle,
+        //         x,
+        //     )
+        // };
 
-        let (x, jac) = jacobian(f, self.state_estimate.into());
+        // let (x, jac) = jacobian(f, self.state_estimate.into());
 
-        let H = HMatrix::from_fn(|i, j| jac[(physics::motorboat_model::STATE_POSITION_X + i, j)]);
+        let x = SVector::<Float, { physics::motorboat_model::NUM_STATES }>::from_row_slice(
+            &self.state_estimate,
+        );
+
+        // let H = HMatrix::from_fn(|i, j| jac[(physics::motorboat_model::STATE_POSITION_X + i, j)]);
+        let H = HMatrix::from_fn(|i, j| match (i, j) {
+            (
+                physics::motorboat_model::STATE_POSITION_X,
+                physics::motorboat_model::STATE_POSITION_X,
+            ) => 1.0,
+            (
+                physics::motorboat_model::STATE_POSITION_Y,
+                physics::motorboat_model::STATE_POSITION_Y,
+            ) => 1.0,
+            _ => 0.0,
+        });
 
         let S = H * self.covariance_estimate * H.transpose() + R;
 
@@ -168,19 +183,24 @@ impl MotorboatDynamicsKalmanFilter {
 
         let y = z - h(&self.state_estimate);
 
-        let f = |x| {
-            physics::motorboat_model::state_transition(
-                &self.model,
-                self.dt,
-                self.last_rudder,
-                self.last_throttle,
-                x,
-            )
-        };
+        // let f = |x| {
+        //     physics::motorboat_model::state_transition(
+        //         &self.model,
+        //         self.dt,
+        //         self.last_rudder,
+        //         self.last_throttle,
+        //         x,
+        //     )
+        // };
 
-        let (x, jac) = jacobian(f, self.state_estimate.into());
+        // let (x, jac) = jacobian(f, self.state_estimate.into());
 
-        let H = HMatrix::from_fn(|i, j| jac[(physics::motorboat_model::STATE_ORIENTATION + i, j)]);
+        let x = SVector::<Float, { physics::motorboat_model::NUM_STATES }>::from_row_slice(
+            &self.state_estimate,
+        );
+
+        // let H = HMatrix::from_fn(|i, j| jac[(physics::motorboat_model::STATE_ORIENTATION + i, j)]);
+        let H = HMatrix::from([0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 0.0]);
 
         let S = H * self.covariance_estimate * H.transpose() + R;
 
@@ -194,19 +214,37 @@ impl MotorboatDynamicsKalmanFilter {
 
 #[cfg(test)]
 mod tests {
+    use crate::physics::motorboat_model::{STATE_POSITION_X, STATE_POSITION_Y, STATE_VELOCITY_X};
+
     use super::*;
+    use assert_approx_eq::assert_approx_eq;
 
     #[test]
     fn test_kalman_predict() {
         let model = crate::rampage::create_motorboat_model();
         let mut kf = MotorboatDynamicsKalmanFilter::new(0.1, model);
 
-        kf.predict(0.0, 0.0);
+        // kf.state_estimate[STATE_VELOCITY_X] = 3.0;
 
-        // assert that the state estimate is finite numbers
-        for x in kf.state_estimate.iter() {
-            assert!(x.is_finite());
+        let mut position = Vector2::new(0.0, 0.0);
+        let velocity = Vector2::new(1.0, 0.0);
+
+        for _ in 0..30 {
+            for i in 0..10 {
+                kf.predict(0.0, 0.0);
+
+                println!("state estimate {} {:?}", i, kf.state_estimate);
+            }
+
+            position += velocity * 1.0;
+            kf.update_gps(position.x, position.y, 1.0);
+
+            println!("expected position: {:?}", position);
+            println!("state estimate: {:?}", kf.state_estimate);
         }
+
+        assert_approx_eq!(kf.state_estimate[STATE_POSITION_X], 3.0, 1e-2);
+        assert_approx_eq!(kf.state_estimate[STATE_POSITION_Y], 0.0);
     }
 
     #[test]
