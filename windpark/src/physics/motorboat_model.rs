@@ -69,15 +69,13 @@ pub fn state_transition<D: DualNum<f32> + Copy + nalgebra::RealField>(
 
     rigid_body.apply_force_at_point(motor_force, motor_mount_point, dt);
 
-    // drag force is the opposite direction of the velocity vector and proportional to the square of the speed
-    let speed = velocity.norm();
+    let water_dynamic_pressure = velocity.norm_squared()
+        * 0.5
+        * D::from(WATER_DENSITY)
+        * D::from(model.water_drag_coefficient);
 
-    let eps = D::from(0.001);
-
-    if speed > eps {
-        let dynamic_pressure: D = speed * speed * 0.5 * D::from(WATER_DENSITY);
-        let drag_force =
-            velocity.normalize() * (dynamic_pressure * -D::from(model.water_drag_coefficient));
+    if water_dynamic_pressure > D::zero() {
+        let drag_force = -velocity.normalize() * water_dynamic_pressure;
         let center_of_drag = rigid_body.body_to_world(Vector2::new(
             model.center_of_water_drag.x.into(),
             model.center_of_water_drag.y.into(),
@@ -86,11 +84,13 @@ pub fn state_transition<D: DualNum<f32> + Copy + nalgebra::RealField>(
     }
 
     let relative_wind_velocity = wind_velocity - velocity;
-    let wind_dynamic_pressure = relative_wind_velocity.norm_squared() * 0.5 * AIR_DENSITY;
+    let wind_dynamic_pressure = relative_wind_velocity.norm_squared()
+        * 0.5
+        * D::from(AIR_DENSITY)
+        * D::from(model.wind_drag_coefficient);
 
-    if wind_dynamic_pressure > eps {
-        let wind_force = relative_wind_velocity.normalize()
-            * (wind_dynamic_pressure * D::from(model.wind_drag_coefficient));
+    if wind_dynamic_pressure > D::zero() {
+        let wind_force = relative_wind_velocity.normalize() * wind_dynamic_pressure;
         let center_of_drag = rigid_body.body_to_world(Vector2::new(
             model.wind_center_force.x.into(),
             model.wind_center_force.y.into(),

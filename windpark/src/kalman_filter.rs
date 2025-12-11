@@ -46,7 +46,7 @@ impl MotorboatDynamicsKalmanFilter {
         // model.water_drag_coefficient *= 1.3;
         // model.wind_drag_coefficient *= 0.8;
         // model.angular_drag_coefficient *= 1.2;
-        // model.motor_scaler *= 1.3;
+        // model.motor_scaler *= 2.3;
 
         Self::new(0.1, model)
     }
