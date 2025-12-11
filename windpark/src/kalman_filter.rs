@@ -1,4 +1,4 @@
-use nalgebra::{SVector, Vector2};
+use nalgebra::{SVector, SVectorView, Vector2, matrix};
 use num_dual::jacobian;
 
 use wasm_bindgen::prelude::*;
@@ -9,7 +9,13 @@ type CovarianceMatrix = nalgebra::SMatrix<
     { physics::motorboat_model::NUM_STATES },
 >;
 
-use crate::{Float, physics};
+use crate::{
+    Float,
+    physics::{
+        self,
+        motorboat_model::{STATE_ORIENTATION, STATE_POSITION_X, STATE_POSITION_Y},
+    },
+};
 
 #[wasm_bindgen]
 pub struct MotorboatDynamicsKalmanFilter {
@@ -17,8 +23,6 @@ pub struct MotorboatDynamicsKalmanFilter {
     state_estimate: [Float; physics::motorboat_model::NUM_STATES],
     covariance_estimate: CovarianceMatrix,
     process_noise: CovarianceMatrix,
-    last_rudder: Float,
-    last_throttle: Float,
     dt: Float,
 }
 
@@ -30,8 +34,6 @@ impl MotorboatDynamicsKalmanFilter {
             state_estimate: [0.0; physics::motorboat_model::NUM_STATES],
             covariance_estimate: CovarianceMatrix::identity(),
             process_noise: CovarianceMatrix::identity() * 0.1,
-            last_rudder: 0.0,
-            last_throttle: 0.0,
             dt,
         }
     }
@@ -82,9 +84,6 @@ impl MotorboatDynamicsKalmanFilter {
 
     #[wasm_bindgen]
     pub fn predict(&mut self, rudder: Float, throttle: Float) {
-        self.last_rudder = rudder;
-        self.last_throttle = throttle;
-
         let f = |x| {
             physics::motorboat_model::state_transition(&self.model, self.dt, rudder, throttle, x)
         };
@@ -115,53 +114,24 @@ impl MotorboatDynamicsKalmanFilter {
         gps_position_y: Float,
         gps_position_variance: Float,
     ) {
-        type HMatrix = nalgebra::SMatrix<Float, 2, { physics::motorboat_model::NUM_STATES }>;
-
-        let z = SVector::<Float, 2>::from_row_slice(&[gps_position_x, gps_position_y]);
+        let z_data = [gps_position_x, gps_position_y];
+        let z = SVectorView::from_slice(&z_data);
         let R = nalgebra::Matrix2::<Float>::identity() * gps_position_variance.abs();
 
-        let h = |state: &[Float; physics::motorboat_model::NUM_STATES]| {
-            SVector::<Float, 2>::from_row_slice(&[
-                state[physics::motorboat_model::STATE_POSITION_X],
-                state[physics::motorboat_model::STATE_POSITION_Y],
-            ])
-        };
+        let h = SVectorView::from_slice(&self.state_estimate[STATE_POSITION_X..=STATE_POSITION_Y]);
 
-        let y = z - h(&self.state_estimate);
+        let y = z - h;
 
-        // let f = |x| {
-        //     physics::motorboat_model::state_transition(
-        //         &self.model,
-        //         self.dt,
-        //         self.last_rudder,
-        //         self.last_throttle,
-        //         x,
-        //     )
-        // };
-
-        // let (x, jac) = jacobian(f, self.state_estimate.into());
-
-        let x = SVector::<Float, { physics::motorboat_model::NUM_STATES }>::from_row_slice(
-            &self.state_estimate,
-        );
-
-        // let H = HMatrix::from_fn(|i, j| jac[(physics::motorboat_model::STATE_POSITION_X + i, j)]);
-        let H = HMatrix::from_fn(|i, j| match (i, j) {
-            (
-                physics::motorboat_model::STATE_POSITION_X,
-                physics::motorboat_model::STATE_POSITION_X,
-            ) => 1.0,
-            (
-                physics::motorboat_model::STATE_POSITION_Y,
-                physics::motorboat_model::STATE_POSITION_Y,
-            ) => 1.0,
-            _ => 0.0,
-        });
+        let H = matrix![
+            1.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0;
+            0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0
+        ];
 
         let S = H * self.covariance_estimate * H.transpose() + R;
 
         let K = self.covariance_estimate * H.transpose() * S.try_inverse().unwrap();
 
+        let x = SVectorView::from_slice(&self.state_estimate);
         self.state_estimate = (x + K * y).into();
         self.covariance_estimate =
             (CovarianceMatrix::identity() - K * H) * self.covariance_estimate;
@@ -170,42 +140,25 @@ impl MotorboatDynamicsKalmanFilter {
     #[allow(non_snake_case)]
     #[wasm_bindgen]
     pub fn update_compass(&mut self, compass_heading: Float, compass_heading_variance: Float) {
-        type HMatrix = nalgebra::SMatrix<Float, 1, { physics::motorboat_model::NUM_STATES }>;
-
-        let z = SVector::<Float, 1>::from_row_slice(&[compass_heading]);
+        let z_data = [compass_heading];
+        let z = SVectorView::from_slice(&z_data);
         let R = nalgebra::Matrix1::<Float>::identity() * compass_heading_variance.abs();
 
-        let h = |state: &[Float; physics::motorboat_model::NUM_STATES]| {
-            SVector::<Float, 1>::from_row_slice(&[
-                state[physics::motorboat_model::STATE_ORIENTATION]
-            ])
-        };
+        let h = SVectorView::from_slice(core::slice::from_ref(
+            &self.state_estimate[STATE_ORIENTATION],
+        ));
 
-        let y = z - h(&self.state_estimate);
+        let y = z - h;
 
-        // let f = |x| {
-        //     physics::motorboat_model::state_transition(
-        //         &self.model,
-        //         self.dt,
-        //         self.last_rudder,
-        //         self.last_throttle,
-        //         x,
-        //     )
-        // };
-
-        // let (x, jac) = jacobian(f, self.state_estimate.into());
-
-        let x = SVector::<Float, { physics::motorboat_model::NUM_STATES }>::from_row_slice(
-            &self.state_estimate,
-        );
-
-        // let H = HMatrix::from_fn(|i, j| jac[(physics::motorboat_model::STATE_ORIENTATION + i, j)]);
-        let H = HMatrix::from([0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 0.0]);
+        let H = matrix![
+            0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 0.0;
+        ];
 
         let S = H * self.covariance_estimate * H.transpose() + R;
 
         let K = self.covariance_estimate * H.transpose() * S.try_inverse().unwrap();
 
+        let x = SVectorView::from_slice(&self.state_estimate);
         self.state_estimate = (x + K * y).into();
         self.covariance_estimate =
             (CovarianceMatrix::identity() - K * H) * self.covariance_estimate;
