@@ -1,4 +1,4 @@
-use nalgebra::{SVector, SVectorView, Vector2, matrix};
+use nalgebra::{SVectorView, Vector2, matrix};
 use num_dual::jacobian;
 
 use wasm_bindgen::prelude::*;
@@ -94,16 +94,6 @@ impl MotorboatDynamicsKalmanFilter {
 
         self.covariance_estimate =
             jac * self.covariance_estimate * jac.transpose() + self.process_noise;
-
-        // let x_hat = physics::motorboat_model::state_transition(
-        //     &self.model,
-        //     dt,
-        //     rudder,
-        //     throttle,
-        //     self.state_estimate.into(),
-        // );
-
-        // self.state_estimate = x_hat.into();
     }
 
     #[allow(non_snake_case)]

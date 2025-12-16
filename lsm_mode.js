@@ -2,10 +2,10 @@ import { ekf, controls } from './app.js';
 import { PIDController } from './PIDController.js';
 import { clamp, degreesToRadians } from './utils.js';
 
-const THROTTLE_P_GAIN = 10.0;
+const THROTTLE_P_GAIN = 5.0;
 const THROTTLE_I_GAIN = 10.0;
 const RUDDER_P_GAIN = 10.0;
-const RUDDER_I_GAIN = 40.0;
+const RUDDER_I_GAIN = 20.0;
 
 const throttlePID = new PIDController(THROTTLE_P_GAIN, THROTTLE_I_GAIN, 0, 100);
 const rudderPID = new PIDController(RUDDER_P_GAIN, RUDDER_I_GAIN, 0, 1);
@@ -85,6 +85,10 @@ function acroModeControl() {
     // Update PID controllers
     controls.rudder = clamp(rudderPID.update(desiredTurnRate, angularVelocity, dt), -15, 15);
     controls.throttle = clamp(throttlePID.update(desiredSpeed, forwardSpeed, dt), -100.0, 100.0);
+
+    if (controls.throttle < 0) {
+        controls.rudder *= -1;
+    }
 
 }
 

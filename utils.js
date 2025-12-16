@@ -1,6 +1,5 @@
 function degreesToRadians(d) { return d * (Math.PI / 180); }
 function radiansToDegrees(r) { return (r * (180 / Math.PI) + 360) % 360; }
-function gaussianRandom() { let u = 0, v = 0; while (u === 0) u = Math.random(); while (v === 0) v = Math.random(); return Math.sqrt(-2.0 * Math.log(u)) * Math.cos(2.0 * Math.PI * v); }
 function clamp(value, min, max) { return Math.min(Math.max(value, min), max); }
 function norm(x, y) {
     const mag = Math.sqrt(x * x + y * y);
@@ -31,4 +30,4 @@ function normalDistribution(mu = 0, sigma = 1) {
     return z0 * sigma + mu;
 }
 
-export { degreesToRadians, radiansToDegrees, gaussianRandom, clamp, norm, normalDistribution };
+export { degreesToRadians, radiansToDegrees, clamp, norm, normalDistribution };
