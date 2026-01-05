@@ -5,8 +5,7 @@ mod rampage;
 
 use std::f32;
 
-use nalgebra::{Rotation2, SVector, Vector2};
-use num_dual::*;
+use nalgebra::{Rotation2, SVector, SVectorView, Vector2, VectorView};
 use wasm_bindgen::prelude::*;
 
 pub use kalman_filter::MotorboatDynamicsKalmanFilter;
@@ -26,6 +25,7 @@ pub struct Windpark {
 impl Windpark {
     #[wasm_bindgen(constructor)]
     pub fn new() -> Windpark {
+        console_error_panic_hook::set_once();
         Windpark {
             x: [0.0; NUM_STATES],
             motorboat_dynamics: rampage::create_motorboat_model(),
@@ -34,12 +34,15 @@ impl Windpark {
 
     #[wasm_bindgen]
     pub fn step(&mut self, rudder: Float, throttle: Float, dt: Float) {
+        let x: SVector<Float, NUM_STATES> = self.x.into();
+        let x_view = SVectorView::from(&x);
+
         let x_hat = physics::motorboat_model::state_transition(
             &self.motorboat_dynamics,
             dt,
             rudder,
             throttle,
-            self.x.into(),
+            x_view,
         );
         self.x = x_hat.into();
     }
@@ -81,13 +84,13 @@ impl Windpark {
     }
 }
 
-fn predict_measurement<D: DualNum<f32> + Copy + nalgebra::RealField>(
-    x: SVector<D, NUM_STATES>,
-) -> SVector<D, 3> {
-    SVector::from([
-        x[0], x[1], x[2], // theta
-    ])
-}
+// fn predict_measurement<D: nalgebra::Field>(
+//     x: SVector<D, NUM_STATES>,
+// ) -> SVector<D, 3> {
+//     SVector::from([
+//         x[0], x[1], x[2], // theta
+//     ])
+// }
 
 // fn state_transition<D: DualNum<f32> + Copy + nalgebra::RealField>(
 //     input: SVector<D, 11>,

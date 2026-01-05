@@ -1,5 +1,4 @@
-use nalgebra::{SVector, Vector2};
-use num_dual::*;
+use nalgebra::{SVector, Vector2, VectorView};
 
 use crate::physics::{
     AIR_DENSITY, WATER_DENSITY,
@@ -36,12 +35,12 @@ pub struct MotorboatModel {
 
 impl MotorboatModel {}
 
-pub fn state_transition<D: DualNum<f32> + Copy + nalgebra::RealField>(
+pub fn state_transition<D: nalgebra::RealField + Copy + From<f32>>(
     model: &MotorboatModel,
     dt: f32,
     rudder: f32,
     throttle: f32,
-    x: SVector<D, NUM_STATES>,
+    x: VectorView<'_, D, nalgebra::Const<NUM_STATES>>,
 ) -> SVector<D, NUM_STATES> {
     let dt = D::from(dt);
     let rudder = D::from(rudder);
@@ -61,7 +60,7 @@ pub fn state_transition<D: DualNum<f32> + Copy + nalgebra::RealField>(
         moment_of_inertia: model.moment_of_inertia.into(),
     };
 
-    let motor_force = polar_to_vector2(throttle * model.motor_scaler, orientation - rudder);
+    let motor_force = polar_to_vector2(throttle * model.motor_scaler.into(), orientation - rudder);
     let motor_mount_point = rigid_body.body_to_world(Vector2::new(
         model.motor_mount_point.x.into(),
         model.motor_mount_point.y.into(),
@@ -70,7 +69,7 @@ pub fn state_transition<D: DualNum<f32> + Copy + nalgebra::RealField>(
     rigid_body.apply_force_at_point(motor_force, motor_mount_point, dt);
 
     let water_dynamic_pressure = velocity.norm_squared()
-        * 0.5
+        * D::from(0.5)
         * D::from(WATER_DENSITY)
         * D::from(model.water_drag_coefficient);
 
@@ -85,7 +84,7 @@ pub fn state_transition<D: DualNum<f32> + Copy + nalgebra::RealField>(
 
     let relative_wind_velocity = wind_velocity - velocity;
     let wind_dynamic_pressure = relative_wind_velocity.norm_squared()
-        * 0.5
+        * D::from(0.5)
         * D::from(AIR_DENSITY)
         * D::from(model.wind_drag_coefficient);
 

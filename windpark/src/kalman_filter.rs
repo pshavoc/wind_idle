@@ -1,5 +1,5 @@
-use nalgebra::{SVectorView, Vector2, matrix};
-use num_dual::jacobian;
+use autodiff_emb::*;
+use nalgebra::{SVector, SVectorView, Vector2, matrix};
 
 use wasm_bindgen::prelude::*;
 
@@ -84,13 +84,26 @@ impl MotorboatDynamicsKalmanFilter {
 
     #[wasm_bindgen]
     pub fn predict(&mut self, rudder: Float, throttle: Float) {
-        let f = |x| {
+        let f = |x: nalgebra::SVectorView<'_, Dual32, { physics::motorboat_model::NUM_STATES }>| {
             physics::motorboat_model::state_transition(&self.model, self.dt, rudder, throttle, x)
         };
 
-        let (x, jac) = jacobian(f, self.state_estimate.into());
+        // let (x, jac) = num_dual::jacobian(f, self.state_estimate.into());
 
-        self.state_estimate = x.into();
+        let x: nalgebra::SVector<Float, { physics::motorboat_model::NUM_STATES }> =
+            self.state_estimate.into();
+
+        let jac = autodiff_emb::jacobian(f, x.as_view());
+
+        let x_hat = physics::motorboat_model::state_transition(
+            &self.model,
+            self.dt,
+            rudder,
+            throttle,
+            x.as_view(),
+        );
+
+        self.state_estimate = x_hat.into();
 
         self.covariance_estimate =
             jac * self.covariance_estimate * jac.transpose() + self.process_noise;
