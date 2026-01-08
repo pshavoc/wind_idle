@@ -1,13 +1,12 @@
 use autodiff_emb::*;
-use nalgebra::{SVector, SVectorView, Vector2, matrix};
+use nalgebra::{SVector, SVectorView, Vector1, Vector2, matrix};
 
 use wasm_bindgen::prelude::*;
 
-type CovarianceMatrix = nalgebra::SMatrix<
-    Float,
-    { physics::motorboat_model::NUM_STATES },
-    { physics::motorboat_model::NUM_STATES },
->;
+const KF_NUM_STATES: usize = physics::motorboat_model::NUM_STATES + 1;
+const STATE_COMPASS_OFFSET: usize = physics::motorboat_model::NUM_STATES;
+
+type CovarianceMatrix = nalgebra::SMatrix<Float, KF_NUM_STATES, KF_NUM_STATES>;
 
 use crate::{
     Float,
@@ -20,7 +19,7 @@ use crate::{
 #[wasm_bindgen]
 pub struct MotorboatDynamicsKalmanFilter {
     model: physics::motorboat_model::MotorboatModel,
-    state_estimate: [Float; physics::motorboat_model::NUM_STATES],
+    state_estimate: SVector<Float, { KF_NUM_STATES }>,
     covariance_estimate: CovarianceMatrix,
     process_noise: CovarianceMatrix,
     dt: Float,
@@ -31,7 +30,7 @@ impl MotorboatDynamicsKalmanFilter {
     fn new(dt: Float, model: physics::motorboat_model::MotorboatModel) -> Self {
         Self {
             model,
-            state_estimate: [0.0; physics::motorboat_model::NUM_STATES],
+            state_estimate: SVector::zeros(),
             covariance_estimate: CovarianceMatrix::identity(),
             process_noise: CovarianceMatrix::identity() * 0.1,
             dt,
@@ -83,30 +82,44 @@ impl MotorboatDynamicsKalmanFilter {
     }
 
     #[wasm_bindgen]
+    pub fn compass_offset(&self) -> Float {
+        self.state_estimate[STATE_COMPASS_OFFSET]
+    }
+
+    #[wasm_bindgen]
     pub fn predict(&mut self, rudder: Float, throttle: Float) {
-        let f = |x: nalgebra::SVectorView<'_, Dual32, { physics::motorboat_model::NUM_STATES }>| {
+        let f = |x: &nalgebra::SVector<Dual32, { physics::motorboat_model::NUM_STATES }>| {
             physics::motorboat_model::state_transition(&self.model, self.dt, rudder, throttle, x)
         };
 
         // let (x, jac) = num_dual::jacobian(f, self.state_estimate.into());
 
-        let x: nalgebra::SVector<Float, { physics::motorboat_model::NUM_STATES }> =
-            self.state_estimate.into();
+        // let x: nalgebra::SVector<Float, { physics::motorboat_model::NUM_STATES }> =
+        //     nalgebra::SVector::from_row_slice(
+        //         &self.state_estimate[..physics::motorboat_model::NUM_STATES],
+        //     );
 
-        let jac = autodiff_emb::jacobian(f, x.as_view());
+        let x = self
+            .state_estimate
+            .fixed_rows::<{ physics::motorboat_model::NUM_STATES }>(0);
 
-        let x_hat = physics::motorboat_model::state_transition(
-            &self.model,
-            self.dt,
-            rudder,
-            throttle,
-            x.as_view(),
-        );
+        let jac = autodiff_emb::jacobian(f, &x);
 
-        self.state_estimate = x_hat.into();
+        let x_hat =
+            physics::motorboat_model::state_transition(&self.model, self.dt, rudder, throttle, &x);
+
+        self.state_estimate
+            .fixed_rows_mut::<{ physics::motorboat_model::NUM_STATES }>(0)
+            .copy_from(&x_hat);
+
+        // expand the jacobian to include the compass offset state
+        let mut jac_expanded = CovarianceMatrix::identity();
+        jac_expanded
+            .fixed_view_mut::<{ physics::motorboat_model::NUM_STATES }, { physics::motorboat_model::NUM_STATES }>(0, 0)
+            .copy_from(&jac);
 
         self.covariance_estimate =
-            jac * self.covariance_estimate * jac.transpose() + self.process_noise;
+            jac_expanded * self.covariance_estimate * jac_expanded.transpose() + self.process_noise;
     }
 
     #[allow(non_snake_case)]
@@ -117,24 +130,25 @@ impl MotorboatDynamicsKalmanFilter {
         gps_position_y: Float,
         gps_position_variance: Float,
     ) {
-        let z_data = [gps_position_x, gps_position_y];
-        let z = SVectorView::from_slice(&z_data);
+        let z = Vector2::new(gps_position_x, gps_position_y);
         let R = nalgebra::Matrix2::<Float>::identity() * gps_position_variance.abs();
 
-        let h = SVectorView::from_slice(&self.state_estimate[STATE_POSITION_X..=STATE_POSITION_Y]);
+        let h = self.state_estimate.fixed_rows::<2>(STATE_POSITION_X);
+
+        // let h = SVectorView::from_slice(&self.state_estimate[STATE_POSITION_X..=STATE_POSITION_Y]);
 
         let y = z - h;
 
         let H = matrix![
-            1.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0;
-            0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0
+            1.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0;
+            0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0
         ];
 
         let S = H * self.covariance_estimate * H.transpose() + R;
 
         let K = self.covariance_estimate * H.transpose() * S.try_inverse().unwrap();
 
-        let x = SVectorView::from_slice(&self.state_estimate);
+        let x = self.state_estimate;
         self.state_estimate = (x + K * y).into();
         self.covariance_estimate =
             (CovarianceMatrix::identity() - K * H) * self.covariance_estimate;
@@ -143,25 +157,24 @@ impl MotorboatDynamicsKalmanFilter {
     #[allow(non_snake_case)]
     #[wasm_bindgen]
     pub fn update_compass(&mut self, compass_heading: Float, compass_heading_variance: Float) {
-        let z_data = [compass_heading];
-        let z = SVectorView::from_slice(&z_data);
+        let z = Vector1::new(compass_heading);
         let R = nalgebra::Matrix1::<Float>::identity() * compass_heading_variance.abs();
 
-        let h = SVectorView::from_slice(core::slice::from_ref(
-            &self.state_estimate[STATE_ORIENTATION],
-        ));
+        let h = Vector1::new(
+            self.state_estimate[STATE_ORIENTATION] + self.state_estimate[STATE_COMPASS_OFFSET],
+        );
 
         let y = z - h;
 
         let H = matrix![
-            0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 0.0;
+            0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 0.0, 1.0;
         ];
 
         let S = H * self.covariance_estimate * H.transpose() + R;
 
         let K = self.covariance_estimate * H.transpose() * S.try_inverse().unwrap();
 
-        let x = SVectorView::from_slice(&self.state_estimate);
+        let x = self.state_estimate;
         self.state_estimate = (x + K * y).into();
         self.covariance_estimate =
             (CovarianceMatrix::identity() - K * H) * self.covariance_estimate;

@@ -35,14 +35,14 @@ impl Windpark {
     #[wasm_bindgen]
     pub fn step(&mut self, rudder: Float, throttle: Float, dt: Float) {
         let x: SVector<Float, NUM_STATES> = self.x.into();
-        let x_view = SVectorView::from(&x);
+        // let x_view = SVectorView::from(&x);
 
         let x_hat = physics::motorboat_model::state_transition(
             &self.motorboat_dynamics,
             dt,
             rudder,
             throttle,
-            x_view,
+            &x,
         );
         self.x = x_hat.into();
     }

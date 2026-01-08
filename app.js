@@ -187,8 +187,8 @@ function animate() {
 
         if (filter_counter % 5 == 0) {
             if (compassUpdateEnabled) {
-                const compass_reading = normalDistribution(boat.angle, 0.05);
-                ekf.update_compass(compass_reading, 0.0025);
+                const compass_reading = normalDistribution(boat.angle, 0.05) - 0.7;
+                ekf.update_compass(compass_reading, 0.25);
                 console.log("update_compass");
             }
         }
@@ -197,7 +197,7 @@ function animate() {
             if (gpsUpdateEnabled) {
                 const gps_x = normalDistribution(boat.pos.x, 0.3);
                 const gps_y = normalDistribution(boat.pos.y, 0.3);
-                ekf.update_gps(gps_x, gps_y, 0.09);
+                ekf.update_gps(gps_x, gps_y, 0.9);
                 console.log("update_gps");
             }
 
@@ -208,9 +208,11 @@ function animate() {
             let wind_vector = new Vector2D(wind[0], wind[1]);
             let wind_dir = wind_vector.angle();
             let wind_speed = wind_vector.length();
+            let compass_offset = ekf.compass_offset();
             console.log("EKF velocity:", vel[0].toFixed(2), vel[1].toFixed(2));
             console.log("EKF wind dir:", wind_dir.toFixed(2), "wind speed:", wind_speed.toFixed(2));
             console.log("EKF angular velocity:", angular_velocity.toFixed(2), "r/s");
+            console.log("EKF compass offset:", compass_offset.toFixed(2));
 
             const wind_dir_error = radiansToDegrees(Math.abs(wind_dir - trueWind.angle()));
             console.log("Wind dir error:", wind_dir_error.toFixed(2));
