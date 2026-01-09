@@ -185,7 +185,7 @@ function animate() {
         ekf.predict(degreesToRadians(controls.rudder), controls.throttle);
         filter_counter += 1;
 
-        if (filter_counter % 5 == 0) {
+        if (filter_counter % 1 == 0) {
             if (compassUpdateEnabled) {
                 const compass_reading = normalDistribution(boat.angle, 0.05) - 0.7;
                 ekf.update_compass(compass_reading, 0.25);
@@ -193,7 +193,7 @@ function animate() {
             }
         }
 
-        if (filter_counter % 10 == 0) {
+        if (filter_counter % 50 == 0) {
             if (gpsUpdateEnabled) {
                 const gps_x = normalDistribution(boat.pos.x, 0.3);
                 const gps_y = normalDistribution(boat.pos.y, 0.3);

@@ -28,11 +28,19 @@ pub struct MotorboatDynamicsKalmanFilter {
 #[wasm_bindgen]
 impl MotorboatDynamicsKalmanFilter {
     fn new(dt: Float, model: physics::motorboat_model::MotorboatModel) -> Self {
+        let process_noise = {
+            let mut q = CovarianceMatrix::identity() * 0.1;
+            q[(STATE_POSITION_X, STATE_POSITION_X)] = 0.01;
+            q[(STATE_POSITION_Y, STATE_POSITION_Y)] = 0.01;
+            q[(STATE_ORIENTATION, STATE_ORIENTATION)] = 0.01;
+            q[(STATE_COMPASS_OFFSET, STATE_COMPASS_OFFSET)] = 0.0;
+            q
+        };
         Self {
             model,
             state_estimate: SVector::zeros(),
             covariance_estimate: CovarianceMatrix::identity(),
-            process_noise: CovarianceMatrix::identity() * 0.1,
+            process_noise: process_noise,
             dt,
         }
     }
@@ -40,12 +48,13 @@ impl MotorboatDynamicsKalmanFilter {
     #[wasm_bindgen(constructor)]
     pub fn create() -> Self {
         let mut model = crate::rampage::create_motorboat_model();
-        // model.mass *= 1.3;
-        // model.moment_of_inertia *= 0.8;
-        // model.water_drag_coefficient *= 1.3;
-        // model.wind_drag_coefficient *= 0.8;
-        // model.angular_drag_coefficient *= 1.2;
-        // model.motor_scaler *= 2.3;
+
+        model.mass *= 1.3;
+        model.moment_of_inertia *= 0.8;
+        model.water_drag_coefficient *= 1.3;
+        model.wind_drag_coefficient *= 0.8;
+        model.angular_drag_coefficient *= 1.2;
+        model.motor_scaler *= 2.3;
 
         Self::new(0.1, model)
     }
