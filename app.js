@@ -187,17 +187,18 @@ function animate() {
 
         if (filter_counter % 1 == 0) {
             if (compassUpdateEnabled) {
-                const compass_reading = normalDistribution(boat.angle, 0.05) - 0.7;
-                ekf.update_compass(compass_reading, 0.25);
+                const compass_reading = normalDistribution(boat.angle, degreesToRadians(5)) - degreesToRadians(120); // Adding 30 degrees offset for testing
+                const sigma = degreesToRadians(5);
+                ekf.update_compass(compass_reading, sigma * sigma);
                 console.log("update_compass");
             }
         }
 
-        if (filter_counter % 50 == 0) {
+        if (filter_counter % 10 == 0) {
             if (gpsUpdateEnabled) {
                 const gps_x = normalDistribution(boat.pos.x, 0.3);
                 const gps_y = normalDistribution(boat.pos.y, 0.3);
-                ekf.update_gps(gps_x, gps_y, 0.9);
+                ekf.update_gps(gps_x, gps_y, 0.3 * 0.3);
                 console.log("update_gps");
             }
 

@@ -29,9 +29,9 @@ pub struct MotorboatDynamicsKalmanFilter {
 impl MotorboatDynamicsKalmanFilter {
     fn new(dt: Float, model: physics::motorboat_model::MotorboatModel) -> Self {
         let process_noise = {
-            let mut q = CovarianceMatrix::identity() * 0.1;
-            q[(STATE_POSITION_X, STATE_POSITION_X)] = 0.01;
-            q[(STATE_POSITION_Y, STATE_POSITION_Y)] = 0.01;
+            let mut q = CovarianceMatrix::identity() * 0.001;
+            q[(STATE_POSITION_X, STATE_POSITION_X)] = 0.001;
+            q[(STATE_POSITION_Y, STATE_POSITION_Y)] = 0.001;
             q[(STATE_ORIENTATION, STATE_ORIENTATION)] = 0.01;
             q[(STATE_COMPASS_OFFSET, STATE_COMPASS_OFFSET)] = 0.0;
             q
@@ -54,7 +54,7 @@ impl MotorboatDynamicsKalmanFilter {
         model.water_drag_coefficient *= 1.3;
         model.wind_drag_coefficient *= 0.8;
         model.angular_drag_coefficient *= 1.2;
-        model.motor_scaler *= 2.3;
+        model.motor_scaler *= 1.2;
 
         Self::new(0.1, model)
     }
