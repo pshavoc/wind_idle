@@ -47,11 +47,11 @@ where S: nalgebra::RawStorage<D, nalgebra::Const<NUM_STATES>>,
     let dt = D::from(dt);
     let rudder = D::from(rudder);
     let throttle = D::from(throttle);
-    let position = Vector2::new(x[0].clone(), x[1].clone());
-    let orientation = x[2].clone();
-    let angular_velocity = x[3].clone();
-    let velocity = Vector2::new(x[4].clone(), x[5].clone());
-    let wind_velocity = Vector2::new(x[6].clone(), x[7].clone());
+    let position = Vector2::new(x[STATE_POSITION_X].clone(), x[STATE_POSITION_Y].clone());
+    let orientation = x[STATE_ORIENTATION].clone();
+    let angular_velocity = x[STATE_ANGULAR_VELOCITY].clone();
+    let velocity = Vector2::new(x[STATE_VELOCITY_X].clone(), x[STATE_VELOCITY_Y].clone());
+    let wind_velocity = Vector2::new(x[STATE_WIND_VELOCITY_X].clone(), x[STATE_WIND_VELOCITY_Y].clone());
 
     let mut rigid_body = RigidBody2D {
         position,

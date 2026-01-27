@@ -176,8 +176,27 @@ impl Windpark {
 //     ])
 // }
 
+// /// Wrap angle to [-pi, pi]
+// pub fn wrap_angle(angle_rad: Float) -> Float {
+//     let mut angle = angle_rad;
+//     while angle > f32::consts::PI {
+//         angle -= 2.0 * f32::consts::PI;
+//     }
+//     while angle < -f32::consts::PI {
+//         angle += 2.0 * f32::consts::PI;
+//     }
+//     angle
+// }
+
+
+/// Wrap angle to [-pi, pi]
+pub fn wrap_angle(angle_rad: Float) -> Float {
+    (angle_rad + f32::consts::PI).rem_euclid(2.0 * f32::consts::PI) - f32::consts::PI
+}
+
 #[cfg(test)]
 mod tests {
+    use assert_approx_eq::assert_approx_eq;
     use super::*;
 
     #[test]
@@ -186,5 +205,17 @@ mod tests {
         windpark.step(0.0, 0.0, 0.05);
         let state = windpark.get_state();
         assert_eq!(state.len(), NUM_STATES);
+    }
+
+    #[test]
+    fn test_wrap_angle() {
+        let angle = wrap_angle(4.0 * f32::consts::PI);
+        assert!((angle - 0.0).abs() < 1e-6);
+    }
+
+    #[test]
+    fn test_wrap_angle2() {
+        let angle = wrap_angle(f32::consts::PI + 0.3);
+        assert_approx_eq!(angle, -(f32::consts::PI - 0.3), 1e-6);
     }
 }
