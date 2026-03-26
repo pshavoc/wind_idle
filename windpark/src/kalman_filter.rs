@@ -123,6 +123,7 @@ impl MotorboatDynamicsKalmanFilter {
 
         // Normalize the orientation angle to [-pi, pi] to prevent floating-point numbers from growing indefinitely.
         self.state_estimate[STATE_ORIENTATION] = wrap_angle(self.state_estimate[STATE_ORIENTATION]);
+        self.state_estimate[STATE_COMPASS_OFFSET] = wrap_angle(self.state_estimate[STATE_COMPASS_OFFSET]);
 
         // expand the jacobian to include the compass offset state
         let mut jac_expanded = CovarianceMatrix::identity();
@@ -145,14 +146,12 @@ impl MotorboatDynamicsKalmanFilter {
         let z = Vector2::new(gps_position_x, gps_position_y);
         let R = nalgebra::Matrix2::<Float>::identity() * gps_position_variance.abs();
 
-        let h = self.state_estimate.fixed_rows::<2>(STATE_POSITION_X);
-
-        let y = z - h;
-
         let H = matrix![
             1.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0;
             0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0
         ];
+
+        let y = z - (H * self.state_estimate);
 
         let S = H * self.covariance_estimate * H.transpose() + R;
 
@@ -163,6 +162,7 @@ impl MotorboatDynamicsKalmanFilter {
         
         // Normalize the orientation angle to [-pi, pi] to prevent floating-point numbers from growing indefinitely.
         self.state_estimate[STATE_ORIENTATION] = wrap_angle(self.state_estimate[STATE_ORIENTATION]);
+        self.state_estimate[STATE_COMPASS_OFFSET] = wrap_angle(self.state_estimate[STATE_COMPASS_OFFSET]);
 
         self.covariance_estimate =
             (CovarianceMatrix::identity() - K * H) * self.covariance_estimate;
@@ -173,14 +173,15 @@ impl MotorboatDynamicsKalmanFilter {
     pub fn update_compass(&mut self, compass_heading: Float, compass_heading_variance: Float) {
         let R = nalgebra::Matrix1::<Float>::identity() * compass_heading_variance.abs();
 
-        let z_pred = self.state_estimate[STATE_ORIENTATION] + self.state_estimate[STATE_COMPASS_OFFSET];
-
-        // Normalize angle difference to [-pi, pi] to avoid discontinuities
-        let y = Vector1::new(wrap_angle(compass_heading - z_pred));
-
         let H = matrix![
             0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 0.0, 1.0;
         ];
+
+        let z = Vector1::new(compass_heading);
+        let mut y = z - (H * self.state_estimate);
+
+        // Normalize angle difference to [-pi, pi] to avoid discontinuities
+        y[0] = wrap_angle(y[0]);
 
         let S = H * self.covariance_estimate * H.transpose() + R;
 
@@ -191,6 +192,7 @@ impl MotorboatDynamicsKalmanFilter {
 
         // Normalize the orientation angle to [-pi, pi] to prevent floating-point numbers from growing indefinitely.
         self.state_estimate[STATE_ORIENTATION] = wrap_angle(self.state_estimate[STATE_ORIENTATION]);
+        self.state_estimate[STATE_COMPASS_OFFSET] = wrap_angle(self.state_estimate[STATE_COMPASS_OFFSET]);
 
         self.covariance_estimate =
             (CovarianceMatrix::identity() - K * H) * self.covariance_estimate;

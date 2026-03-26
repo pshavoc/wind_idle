@@ -190,8 +190,15 @@ impl Windpark {
 
 
 /// Wrap angle to [-pi, pi]
-pub fn wrap_angle(angle_rad: Float) -> Float {
-    (angle_rad + f32::consts::PI).rem_euclid(2.0 * f32::consts::PI) - f32::consts::PI
+pub fn wrap_angle(mut angle_rad: Float) -> Float {
+    while angle_rad > core::f32::consts::PI {
+        angle_rad -= 2.0 * core::f32::consts::PI;
+    }
+    while angle_rad < -core::f32::consts::PI {
+        angle_rad += 2.0 * core::f32::consts::PI;
+    }
+    angle_rad
+
 }
 
 #[cfg(test)]
